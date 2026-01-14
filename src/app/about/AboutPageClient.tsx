@@ -423,7 +423,7 @@ export function AboutPageClient() {
                 <Link href="/shop">
                   <Button
                     size="lg"
-                    variant="primary"
+                    variant="ghost"
                     className="bg-white text-secondary hover:bg-neutral-100"
                   >
                     Shop Products
