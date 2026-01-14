@@ -1,0 +1,74 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: #ffffff;
+    --foreground: #171717;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply text-neutral-900 bg-neutral-50;
+    font-family: "Inter", system-ui, -apple-system, sans-serif;
+  }
+
+  /* Focus visible for accessibility */
+  *:focus-visible {
+    @apply outline-none ring-2 ring-primary-500 ring-offset-2;
+  }
+}
+
+@layer components {
+  .container {
+    @apply max-w-7xl mx-auto;
+  }
+
+  /* Product grid responsive */
+  .product-grid {
+    @apply grid gap-4 sm:gap-6;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  }
+
+  /* Prose for product descriptions */
+  .prose-product {
+    @apply text-neutral-600 leading-relaxed;
+  }
+
+  .prose-product p {
+    @apply mb-4;
+  }
+
+  .prose-product ul {
+    @apply list-disc pl-5 mb-4 space-y-1;
+  }
+
+  .prose-product li {
+    @apply text-neutral-600;
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  /* Hide scrollbar but keep functionality */
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Skeleton loading animation */
+  .skeleton {
+    @apply bg-neutral-200 animate-pulse rounded;
+  }
+}
