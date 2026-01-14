@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import Image from "next/image";
+import { useState, useEffect } from "react";
 import { ShoppingCart, Menu, X, Search, User, Phone } from "lucide-react";
 import { useCartStore } from "@/stores/cartStore";
 import { Navigation } from "./Navigation";
@@ -13,7 +14,13 @@ export function Header() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [cartOpen, setCartOpen] = useState(false);
+  const [mounted, setMounted] = useState(false);
   const itemCount = useCartStore((state) => state.getItemCount());
+
+  // Prevent hydration mismatch - only show cart count after mount
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   return (
     <header className="sticky top-0 z-50 bg-white border-b border-neutral-100">
@@ -44,14 +51,16 @@ export function Header() {
       {/* Main header */}
       <div className="container mx-auto px-4">
         <div className="flex items-center justify-between h-16 md:h-20">
-          {/* Logo - Modern minimal */}
-          <Link href="/" className="flex-shrink-0 group">
-            <span className="text-xl md:text-2xl font-bold text-neutral-900 tracking-tight group-hover:text-neutral-700 transition-colors">
-              CASCADE
-            </span>
-            <span className="hidden md:inline text-sm text-neutral-400 ml-2 font-normal">
-              Autobody & Paint
-            </span>
+          {/* Logo */}
+          <Link href="/" className="flex-shrink-0">
+            <Image
+              src="/logo.png"
+              alt="Cascade Autobody & Paint Supply"
+              width={180}
+              height={50}
+              className="h-10 md:h-12 w-auto"
+              priority
+            />
           </Link>
 
           {/* Desktop Navigation */}
@@ -86,7 +95,7 @@ export function Header() {
               aria-label="Open cart"
             >
               <ShoppingCart className="h-5 w-5 text-neutral-600 hover:text-primary transition-colors" />
-              {itemCount > 0 && (
+              {mounted && itemCount > 0 && (
                 <span className="absolute -top-1 -right-1 bg-secondary text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">
                   {itemCount > 99 ? "99+" : itemCount}
                 </span>

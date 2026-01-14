@@ -5,10 +5,8 @@ import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 
 const navItems = [
+  { href: "/", label: "Home" },
   { href: "/shop", label: "Shop" },
-  { href: "/shop?category=paint", label: "Paint" },
-  { href: "/shop?category=body", label: "Body Supplies" },
-  { href: "/shop?category=tools", label: "Tools" },
   { href: "/paint", label: "Paint Services" },
   { href: "/about", label: "About" },
 ];

@@ -217,6 +217,21 @@ class WooCommerceClient {
     return this.request<User>(`/customers/${id}`);
   }
 
+  async searchCustomers(params: {
+    search?: string;
+    email?: string;
+    per_page?: number;
+  } = {}): Promise<User[]> {
+    const searchParams = new URLSearchParams();
+    Object.entries(params).forEach(([key, value]) => {
+      if (value !== undefined) {
+        searchParams.append(key, String(value));
+      }
+    });
+    if (!params.per_page) searchParams.set("per_page", "10");
+    return this.request<User[]>(`/customers?${searchParams}`);
+  }
+
   async createCustomer(data: {
     email: string;
     first_name: string;

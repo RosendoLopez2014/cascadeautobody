@@ -11,12 +11,10 @@ interface MobileMenuProps {
 }
 
 const navItems = [
-  { href: "/shop", label: "Shop All" },
-  { href: "/shop?category=paint", label: "Paint" },
-  { href: "/shop?category=body", label: "Body Supplies" },
-  { href: "/shop?category=tools", label: "Tools" },
+  { href: "/", label: "Home" },
+  { href: "/shop", label: "Shop" },
   { href: "/paint", label: "Paint Services" },
-  { href: "/about", label: "About Us" },
+  { href: "/about", label: "About" },
 ];
 
 const accountItems = [
