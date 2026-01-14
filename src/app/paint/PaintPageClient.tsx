@@ -144,8 +144,8 @@ export function PaintPageClient() {
                   <Link href="/shop?category=paint">
                     <Button
                       size="lg"
-                      variant="outline"
-                      className="text-white border-white hover:bg-white/10"
+                      variant="ghost"
+                      className="text-white border-2 border-white hover:bg-white/10"
                     >
                       Browse Paint Products
                     </Button>
