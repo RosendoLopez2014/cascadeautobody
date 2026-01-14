@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 
 const navItems = [
@@ -22,17 +23,31 @@ export function Navigation() {
           (item.href !== "/" && pathname?.startsWith(item.href.split("?")[0]));
 
         return (
-          <Link
-            key={item.href}
-            href={item.href}
-            className={cn(
-              "px-3 py-2 text-sm font-medium rounded-md transition-colors",
-              isActive
-                ? "text-primary bg-primary-50"
-                : "text-neutral-600 hover:text-primary hover:bg-neutral-50"
-            )}
-          >
-            {item.label}
+          <Link key={item.href} href={item.href} className="relative">
+            <motion.div
+              className={cn(
+                "px-4 py-2 text-sm font-medium rounded-lg transition-colors relative",
+                isActive
+                  ? "text-primary"
+                  : "text-neutral-600 hover:text-primary"
+              )}
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+            >
+              {item.label}
+              {isActive && (
+                <motion.div
+                  layoutId="navIndicator"
+                  className="absolute inset-0 bg-primary-50 rounded-lg -z-10"
+                  initial={false}
+                  transition={{
+                    type: "spring",
+                    stiffness: 350,
+                    damping: 30,
+                  }}
+                />
+              )}
+            </motion.div>
           </Link>
         );
       })}

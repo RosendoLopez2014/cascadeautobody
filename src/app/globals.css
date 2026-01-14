@@ -50,6 +50,129 @@
   .prose-product li {
     @apply text-neutral-600;
   }
+
+  /* ===============================================
+     FRAMER-STYLE COMPONENTS
+     =============================================== */
+
+  /* Bento grid layout */
+  .bento-grid {
+    @apply grid gap-4;
+    grid-template-columns: repeat(4, 1fr);
+    grid-template-rows: repeat(3, minmax(180px, auto));
+  }
+
+  .bento-item-large {
+    grid-column: span 2;
+    grid-row: span 2;
+  }
+
+  .bento-item-wide {
+    grid-column: span 2;
+  }
+
+  .bento-item-tall {
+    grid-row: span 2;
+  }
+
+  /* Glass morphism card */
+  .glass-card {
+    @apply bg-white/70 backdrop-blur-lg border border-white/20 shadow-lg;
+  }
+
+  .glass-card-dark {
+    @apply bg-neutral-900/70 backdrop-blur-lg border border-white/10 shadow-lg;
+  }
+
+  /* Gradient text */
+  .gradient-text {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-secondary via-secondary-500 to-secondary-400;
+  }
+
+  .gradient-text-neutral {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-neutral-900 via-neutral-700 to-neutral-500;
+  }
+
+  /* Animated gradient background */
+  .gradient-animated {
+    background: linear-gradient(-45deg, #18181b, #27272a, #3f3f46, #18181b);
+    background-size: 400% 400%;
+    animation: gradient-shift 8s ease infinite;
+  }
+
+  /* Section with diagonal divider */
+  .section-diagonal {
+    @apply relative;
+    clip-path: polygon(0 0, 100% 5%, 100% 100%, 0 95%);
+  }
+
+  /* Bold section header with accent line */
+  .section-header-accent {
+    @apply relative inline-block pb-3;
+  }
+
+  .section-header-accent::after {
+    content: "";
+    @apply absolute bottom-0 left-0 w-16 h-1 bg-secondary rounded-full;
+  }
+
+  /* Floating decorative element */
+  .float-element {
+    @apply absolute pointer-events-none;
+    animation: float 6s ease-in-out infinite;
+  }
+
+  /* Noise texture overlay */
+  .noise-overlay {
+    @apply absolute inset-0 opacity-[0.02] pointer-events-none;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+  }
+
+  /* Interactive card with lift effect */
+  .card-lift {
+    @apply transition-all duration-300 ease-out;
+  }
+
+  .card-lift:hover {
+    @apply -translate-y-2 shadow-card-hover;
+  }
+
+  /* Button with glow effect */
+  .btn-glow {
+    @apply relative overflow-hidden;
+  }
+
+  .btn-glow::before {
+    content: "";
+    @apply absolute inset-0 bg-secondary opacity-0 blur-xl transition-opacity duration-300;
+  }
+
+  .btn-glow:hover::before {
+    @apply opacity-30;
+  }
+
+  /* Asymmetric grid */
+  .grid-asymmetric {
+    @apply grid gap-6;
+    grid-template-columns: repeat(12, 1fr);
+  }
+
+  /* Pill navigation */
+  .pill-nav {
+    @apply flex gap-2 overflow-x-auto pb-2 scrollbar-hide;
+  }
+
+  .pill-nav-item {
+    @apply px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-all duration-200;
+  }
+
+  .pill-nav-item-active {
+    @apply bg-primary text-white;
+  }
+
+  .pill-nav-item-inactive {
+    @apply bg-white text-neutral-600 border border-neutral-200 hover:border-primary hover:text-primary;
+  }
 }
 
 @layer utilities {
@@ -70,5 +193,36 @@
   /* Skeleton loading animation */
   .skeleton {
     @apply bg-neutral-200 animate-pulse rounded;
+  }
+
+  /* Perspective for 3D transforms */
+  .perspective-1000 {
+    perspective: 1000px;
+  }
+
+  .perspective-2000 {
+    perspective: 2000px;
+  }
+
+  /* Transform style for 3D children */
+  .transform-3d {
+    transform-style: preserve-3d;
+  }
+
+  /* Backface visibility */
+  .backface-hidden {
+    backface-visibility: hidden;
+  }
+}
+
+/* Reduced motion support for accessibility */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }
