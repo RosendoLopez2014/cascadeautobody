@@ -132,6 +132,7 @@ export function PaintPageClient() {
                   <a href="tel:+15099728989">
                     <Button
                       size="lg"
+                      variant="ghost"
                       className="bg-white text-secondary-600 hover:bg-neutral-100 font-semibold"
                     >
                       <Phone className="h-5 w-5 mr-2" />

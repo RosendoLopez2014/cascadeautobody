@@ -127,6 +127,7 @@ export default function HomePage() {
                     <Link href="/shop">
                       <Button
                         size="lg"
+                        variant="ghost"
                         className="bg-white text-neutral-900 hover:bg-neutral-100 w-full sm:w-auto text-base px-8 btn-glow"
                       >
                         <ShoppingBag className="mr-2 h-5 w-5" />
