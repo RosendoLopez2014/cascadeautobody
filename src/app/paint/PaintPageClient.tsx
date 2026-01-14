@@ -459,6 +459,7 @@ export function PaintPageClient() {
               <Link href="/shop">
                 <Button
                   size="lg"
+                  variant="ghost"
                   className="bg-white text-primary hover:bg-neutral-100"
                 >
                   Shop Paint Products
