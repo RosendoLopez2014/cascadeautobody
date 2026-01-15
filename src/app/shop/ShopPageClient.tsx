@@ -6,7 +6,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Package, ChevronRight, Grid3X3 } from "lucide-react";
 import { ProductGridWithToggle } from "@/components/shop";
 import { LoadingScreen } from "@/components/ui";
-import { FadeIn, TextReveal } from "@/components/motion";
+import { FadeIn } from "@/components/motion";
 import { Category, Product } from "@/types";
 
 interface ShopPageClientProps {

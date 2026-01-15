@@ -22,7 +22,8 @@ export function TextReveal<T extends ElementType = "h1">({
   once = true,
   ...props
 }: TextRevealProps<T>) {
-  const ref = useRef<HTMLElement>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const ref = useRef<any>(null);
   const isInView = useInView(ref, { once, amount: 0.5 });
   const Component = as || "h1";
 

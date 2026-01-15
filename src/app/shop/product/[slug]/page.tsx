@@ -5,7 +5,7 @@ import { ChevronRight, Truck, Store, Clock } from "lucide-react";
 import { woocommerce } from "@/lib/woocommerce";
 import { formatPrice, stripHtml, sanitizeHtml } from "@/lib/utils";
 import { ProductGallery } from "@/components/shop/ProductGallery";
-import { AddToCart, InventoryBadge } from "@/components/shop";
+import { AddToCart, LocationStock } from "@/components/shop";
 import { Badge } from "@/components/ui";
 
 interface ProductPageProps {
@@ -41,8 +41,6 @@ export default async function ProductPage({ params }: ProductPageProps) {
   } catch {
     notFound();
   }
-
-  const isInStock = product.stock_status === "instock";
 
   // Sanitize HTML content from WooCommerce
   const sanitizedShortDescription = product.short_description
@@ -94,7 +92,6 @@ export default async function ProductPage({ params }: ProductPageProps) {
               <Badge variant="default">{product.categories[0].name}</Badge>
             )}
             {product.on_sale && <Badge variant="warning">Sale</Badge>}
-            {!isInStock && <Badge variant="danger">Out of Stock</Badge>}
           </div>
 
           {/* Title */}
@@ -117,15 +114,8 @@ export default async function ProductPage({ params }: ProductPageProps) {
             )}
           </div>
 
-          {/* Inventory by location */}
-          {product.inventory_by_location && (
-            <div className="bg-neutral-50 rounded-lg p-4">
-              <h3 className="font-medium text-neutral-900 mb-3">
-                Availability by Location
-              </h3>
-              <InventoryBadge inventory={product.inventory_by_location} />
-            </div>
-          )}
+          {/* Stock at selected location */}
+          <LocationStock stockQuantity={product.stock_quantity} />
 
           {/* Add to cart */}
           <div className="pt-4 border-t border-neutral-200">

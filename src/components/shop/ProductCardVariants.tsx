@@ -2,38 +2,64 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { ShoppingCart, Plus, MapPin } from "lucide-react";
+import { ShoppingCart, Plus, Check, Eye, CheckCircle, XCircle } from "lucide-react";
 import { Product } from "@/types";
 import { formatPrice } from "@/lib/utils";
 import { useCartStore } from "@/stores/cartStore";
+import { useLocationStore } from "@/stores/locationStore";
 import { cn } from "@/lib/utils";
+import { useState } from "react";
 
 interface ProductCardProps {
   product: Product;
 }
 
-// Shared hook for cart functionality
+// Shared hook for cart and location functionality
 function useProductCard(product: Product) {
   const addItem = useCartStore((state) => state.addItem);
   const cartItem = useCartStore((state) => state.getItem(product.id));
-  const isInStock = product.stock_status === "instock";
+  const selectedLocationId = useLocationStore((state) => state.selectedLocationId);
+  const [justAdded, setJustAdded] = useState(false);
+
+  // Get location name and stock based on selected location
+  const locationName = selectedLocationId === 1 ? "Yakima" : "Toppenish";
+  // Yakima (1) = actual WooCommerce stock, Toppenish (2) = 0 for now
+  const stockForLocation = selectedLocationId === 1 ? (product.stock_quantity ?? 0) : 0;
+  const isInStock = stockForLocation > 0;
 
   const handleAddToCart = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    if (isInStock) {
+    if (isInStock && !justAdded) {
       addItem(product, 1);
+      setJustAdded(true);
+      setTimeout(() => setJustAdded(false), 1500);
     }
   };
 
-  return { addItem, cartItem, isInStock, handleAddToCart };
+  const handleQuickView = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    window.location.href = `/shop/product/${product.slug}`;
+  };
+
+  return {
+    addItem,
+    cartItem,
+    isInStock,
+    handleAddToCart,
+    handleQuickView,
+    justAdded,
+    locationName,
+    stockForLocation
+  };
 }
 
 // ============================================
 // COMPACT GRID - Smaller cards, more products visible
 // ============================================
 export function ProductCardCompact({ product }: ProductCardProps) {
-  const { cartItem, isInStock, handleAddToCart } = useProductCard(product);
+  const { cartItem, isInStock, handleAddToCart, locationName, stockForLocation } = useProductCard(product);
   const mainImage = product.images[0];
 
   return (
@@ -89,25 +115,36 @@ export function ProductCardCompact({ product }: ProductCardProps) {
             <span className="text-xs text-secondary font-medium">{cartItem.quantity} in cart</span>
           )}
         </div>
+        {/* Stock for selected location */}
+        <div className="flex items-center gap-1 text-xs mt-1">
+          <span className="text-neutral-500">{locationName}:</span>
+          <span className={cn(
+            "font-medium",
+            stockForLocation > 5 ? "text-green-600" :
+            stockForLocation > 0 ? "text-amber-600" : "text-red-500"
+          )}>
+            {stockForLocation > 0 ? stockForLocation : "Out"}
+          </span>
+        </div>
       </div>
     </Link>
   );
 }
 
 // ============================================
-// DETAILED CARDS - Current size with SKU, brand, more info
+// DETAILED CARDS - New design with stock badge and dual buttons
 // ============================================
 export function ProductCardDetailed({ product }: ProductCardProps) {
-  const { cartItem, isInStock, handleAddToCart } = useProductCard(product);
+  const { cartItem, isInStock, handleAddToCart, handleQuickView, justAdded, locationName, stockForLocation } = useProductCard(product);
   const mainImage = product.images[0];
 
   return (
     <Link
       href={`/shop/product/${product.slug}`}
-      className="group block bg-white rounded-lg overflow-hidden border border-neutral-100 hover:shadow-card-hover transition-all"
+      className="group block bg-white rounded-xl overflow-hidden border border-neutral-200 hover:shadow-lg transition-all"
     >
       {/* Image */}
-      <div className="relative aspect-square bg-neutral-50">
+      <div className="relative aspect-square bg-neutral-100">
         {mainImage ? (
           <Image
             src={mainImage.src}
@@ -122,49 +159,48 @@ export function ProductCardDetailed({ product }: ProductCardProps) {
           </div>
         )}
 
-        {/* Sale badge */}
+        {/* Stock Badge - Top Left */}
+        <div
+          className={cn(
+            "absolute top-3 left-3 flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold shadow-sm",
+            isInStock
+              ? "bg-green-500 text-white"
+              : "bg-neutral-200 text-neutral-600"
+          )}
+        >
+          {isInStock ? (
+            <>
+              <CheckCircle className="h-3.5 w-3.5" />
+              <span>In Stock</span>
+            </>
+          ) : (
+            <>
+              <XCircle className="h-3.5 w-3.5" />
+              <span>Out of Stock</span>
+            </>
+          )}
+        </div>
+
+        {/* Sale badge - Top Right */}
         {product.on_sale && (
-          <span className="absolute top-3 left-3 bg-secondary text-white text-xs font-semibold px-2 py-1 rounded">
+          <span className="absolute top-3 right-3 bg-secondary text-white text-xs font-bold px-2.5 py-1 rounded-full shadow-lg">
             Sale
           </span>
         )}
 
-        {/* Quick add button */}
-        {isInStock && (
-          <button
-            onClick={handleAddToCart}
-            className="absolute bottom-3 right-3 p-2.5 bg-primary text-white rounded-lg shadow-soft opacity-0 group-hover:opacity-100 transition-all hover:bg-primary-800"
-            aria-label="Add to cart"
-          >
-            <ShoppingCart className="h-5 w-5" />
-          </button>
-        )}
-
-        {!isInStock && (
-          <div className="absolute inset-0 bg-white/70 flex items-center justify-center">
-            <span className="text-sm font-medium text-neutral-600 bg-white px-3 py-1 rounded shadow-sm">Out of Stock</span>
+        {/* Cart indicator badge */}
+        {cartItem && (
+          <div className="absolute bottom-3 right-3 bg-primary text-white text-xs font-bold px-2.5 py-1 rounded-full shadow-lg flex items-center gap-1">
+            <Check className="h-3 w-3" />
+            {cartItem.quantity}
           </div>
         )}
       </div>
 
       {/* Content */}
       <div className="p-4">
-        {/* Category & SKU */}
-        <div className="flex items-center justify-between mb-2">
-          {product.categories[0] && (
-            <span className="text-xs text-neutral-400 uppercase tracking-wider">
-              {product.categories[0].name}
-            </span>
-          )}
-          {product.sku && (
-            <span className="text-xs text-neutral-400 font-mono">
-              {product.sku}
-            </span>
-          )}
-        </div>
-
-        {/* Title */}
-        <h3 className="font-medium text-neutral-900 line-clamp-2 mb-3 group-hover:text-primary transition-colors">
+        {/* Product Name */}
+        <h3 className="font-semibold text-neutral-900 line-clamp-2 group-hover:text-primary transition-colors mb-2 min-h-[2.5rem]">
           {product.name}
         </h3>
 
@@ -180,33 +216,55 @@ export function ProductCardDetailed({ product }: ProductCardProps) {
           )}
         </div>
 
-        {/* Stock by location */}
-        {product.inventory_by_location && (
-          <div className="flex items-center gap-3 text-xs text-neutral-500">
-            {product.inventory_by_location.map((loc) => (
-              <span key={loc.location_id} className="flex items-center gap-1">
-                <MapPin className="h-3 w-3" />
-                {loc.location_name}:
-                <span className={cn(
-                  "font-medium",
-                  loc.stock_quantity > 5 ? "text-green-600" :
-                  loc.stock_quantity > 0 ? "text-amber-600" : "text-red-500"
-                )}>
-                  {loc.stock_quantity}
-                </span>
-              </span>
-            ))}
-          </div>
-        )}
+        {/* Selected Location Stock Display */}
+        <div className="flex items-center gap-1.5 text-sm text-neutral-600 mb-4">
+          <span className="text-neutral-500">{locationName}:</span>
+          <span className={cn(
+            "font-semibold",
+            stockForLocation > 5 ? "text-green-600" :
+            stockForLocation > 0 ? "text-amber-600" : "text-red-500"
+          )}>
+            {stockForLocation > 0 ? `${stockForLocation} in stock` : "Out of stock"}
+          </span>
+        </div>
 
-        {/* Cart indicator */}
-        {cartItem && (
-          <div className="mt-3 pt-3 border-t border-neutral-100">
-            <span className="text-sm text-secondary font-medium">
-              {cartItem.quantity} in cart
-            </span>
-          </div>
-        )}
+        {/* Action Buttons - Stacked */}
+        <div className="space-y-2">
+          {/* Add to Cart Button */}
+          <button
+            onClick={handleAddToCart}
+            disabled={!isInStock}
+            className={cn(
+              "w-full flex items-center justify-center gap-2 py-2.5 rounded-lg font-semibold text-sm transition-all",
+              justAdded
+                ? "bg-green-500 text-white"
+                : isInStock
+                ? "bg-secondary hover:bg-secondary/90 text-white"
+                : "bg-neutral-100 text-neutral-400 cursor-not-allowed"
+            )}
+          >
+            {justAdded ? (
+              <>
+                <Check className="h-4 w-4" />
+                <span>Added!</span>
+              </>
+            ) : (
+              <>
+                <ShoppingCart className="h-4 w-4" />
+                <span>Add to Cart</span>
+              </>
+            )}
+          </button>
+
+          {/* Quick View Button */}
+          <button
+            onClick={handleQuickView}
+            className="w-full flex items-center justify-center gap-2 py-2 rounded-lg font-medium text-sm border border-neutral-200 text-neutral-600 hover:border-neutral-300 hover:bg-neutral-50 transition-all"
+          >
+            <Eye className="h-4 w-4" />
+            <span>Quick View</span>
+          </button>
+        </div>
       </div>
     </Link>
   );
@@ -216,7 +274,7 @@ export function ProductCardDetailed({ product }: ProductCardProps) {
 // LIST VIEW - Horizontal layout
 // ============================================
 export function ProductCardList({ product }: ProductCardProps) {
-  const { cartItem, isInStock, handleAddToCart } = useProductCard(product);
+  const { cartItem, isInStock, handleAddToCart, justAdded, locationName, stockForLocation } = useProductCard(product);
   const mainImage = product.images[0];
 
   // Strip HTML tags for clean text display
@@ -291,24 +349,17 @@ export function ProductCardList({ product }: ProductCardProps) {
             </p>
           )}
 
-          {/* Stock by location */}
-          {product.inventory_by_location && (
-            <div className="flex items-center gap-4 text-xs text-neutral-500">
-              {product.inventory_by_location.map((loc) => (
-                <span key={loc.location_id} className="flex items-center gap-1">
-                  <MapPin className="h-3 w-3" />
-                  {loc.location_name}:
-                  <span className={cn(
-                    "font-medium",
-                    loc.stock_quantity > 5 ? "text-green-600" :
-                    loc.stock_quantity > 0 ? "text-amber-600" : "text-red-500"
-                  )}>
-                    {loc.stock_quantity}
-                  </span>
-                </span>
-              ))}
-            </div>
-          )}
+          {/* Stock for selected location */}
+          <div className="flex items-center gap-1.5 text-xs text-neutral-500">
+            <span>{locationName}:</span>
+            <span className={cn(
+              "font-medium",
+              stockForLocation > 5 ? "text-green-600" :
+              stockForLocation > 0 ? "text-amber-600" : "text-red-500"
+            )}>
+              {stockForLocation > 0 ? `${stockForLocation} in stock` : "Out of stock"}
+            </span>
+          </div>
         </div>
 
         {/* Bottom row: price + add to cart */}
@@ -332,10 +383,24 @@ export function ProductCardList({ product }: ProductCardProps) {
           {isInStock && (
             <button
               onClick={handleAddToCart}
-              className="flex items-center gap-2 px-3 py-1.5 bg-primary text-white text-sm font-medium rounded hover:bg-primary-800 transition-colors"
+              className={cn(
+                "flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded transition-colors",
+                justAdded
+                  ? "bg-green-500 text-white"
+                  : "bg-primary text-white hover:bg-primary-800"
+              )}
             >
-              <Plus className="h-4 w-4" />
-              Add
+              {justAdded ? (
+                <>
+                  <Check className="h-4 w-4" />
+                  Added
+                </>
+              ) : (
+                <>
+                  <Plus className="h-4 w-4" />
+                  Add
+                </>
+              )}
             </button>
           )}
         </div>
@@ -348,7 +413,7 @@ export function ProductCardList({ product }: ProductCardProps) {
 // LARGE HERO CARDS - Bigger images, premium feel
 // ============================================
 export function ProductCardHero({ product }: ProductCardProps) {
-  const { cartItem, isInStock, handleAddToCart } = useProductCard(product);
+  const { cartItem, isInStock, handleAddToCart, handleQuickView, justAdded, locationName, stockForLocation } = useProductCard(product);
   const mainImage = product.images[0];
 
   return (
@@ -372,58 +437,60 @@ export function ProductCardHero({ product }: ProductCardProps) {
           </div>
         )}
 
-        {/* Gradient overlay for text */}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+        {/* Stock Badge */}
+        <div
+          className={cn(
+            "absolute top-4 left-4 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-semibold shadow-sm",
+            isInStock
+              ? "bg-green-500 text-white"
+              : "bg-neutral-200 text-neutral-600"
+          )}
+        >
+          {isInStock ? (
+            <>
+              <CheckCircle className="h-4 w-4" />
+              <span>In Stock</span>
+            </>
+          ) : (
+            <>
+              <XCircle className="h-4 w-4" />
+              <span>Out of Stock</span>
+            </>
+          )}
+        </div>
 
         {/* Sale badge */}
         {product.on_sale && (
-          <span className="absolute top-4 left-4 bg-secondary text-white text-sm font-semibold px-3 py-1.5 rounded-lg">
+          <span className="absolute top-4 right-4 bg-secondary text-white text-sm font-semibold px-3 py-1.5 rounded-lg">
             Sale
           </span>
         )}
 
-        {/* Quick add button */}
-        {isInStock && (
-          <button
-            onClick={handleAddToCart}
-            className="absolute bottom-4 right-4 flex items-center gap-2 px-4 py-2 bg-white text-primary font-medium rounded-lg shadow-soft opacity-0 group-hover:opacity-100 transition-all hover:bg-neutral-50"
-            aria-label="Add to cart"
-          >
-            <ShoppingCart className="h-4 w-4" />
-            Add to Cart
-          </button>
-        )}
-
-        {!isInStock && (
-          <div className="absolute inset-0 bg-white/50 flex items-center justify-center">
-            <span className="text-base font-medium text-neutral-700 bg-white px-4 py-2 rounded-lg shadow-sm">Out of Stock</span>
-          </div>
-        )}
-
         {/* Cart indicator overlay */}
         {cartItem && (
-          <div className="absolute top-4 right-4 bg-secondary text-white text-sm font-medium px-2 py-1 rounded">
+          <div className="absolute bottom-4 right-4 bg-primary text-white text-sm font-medium px-3 py-1.5 rounded-full flex items-center gap-1">
+            <Check className="h-4 w-4" />
             {cartItem.quantity} in cart
           </div>
         )}
       </div>
 
       {/* Content */}
-      <div className="p-5">
+      <div className="p-5 space-y-3">
         {/* Category */}
         {product.categories[0] && (
-          <span className="text-xs text-neutral-400 uppercase tracking-wider mb-2 block">
+          <span className="text-xs text-neutral-400 uppercase tracking-wider">
             {product.categories[0].name}
           </span>
         )}
 
         {/* Title */}
-        <h3 className="text-lg font-semibold text-neutral-900 line-clamp-2 mb-3 group-hover:text-primary transition-colors">
+        <h3 className="text-lg font-bold text-neutral-900 line-clamp-2 group-hover:text-primary transition-colors">
           {product.name}
         </h3>
 
         {/* Price */}
-        <div className="flex items-baseline gap-2 mb-4">
+        <div className="flex items-baseline gap-2">
           <span className="text-xl font-bold text-neutral-900">
             {formatPrice(product.price)}
           </span>
@@ -434,24 +501,53 @@ export function ProductCardHero({ product }: ProductCardProps) {
           )}
         </div>
 
-        {/* Stock by location */}
-        {product.inventory_by_location && (
-          <div className="flex items-center gap-4 text-sm">
-            {product.inventory_by_location.map((loc) => (
-              <div key={loc.location_id} className="flex items-center gap-1.5">
-                <MapPin className="h-4 w-4 text-neutral-400" />
-                <span className="text-neutral-600">{loc.location_name}:</span>
-                <span className={cn(
-                  "font-semibold",
-                  loc.stock_quantity > 5 ? "text-green-600" :
-                  loc.stock_quantity > 0 ? "text-amber-600" : "text-red-500"
-                )}>
-                  {loc.stock_quantity > 0 ? loc.stock_quantity : "Out"}
-                </span>
-              </div>
-            ))}
-          </div>
-        )}
+        {/* Stock for selected location */}
+        <div className="flex items-center gap-1.5 text-sm">
+          <span className="text-neutral-600">{locationName}:</span>
+          <span className={cn(
+            "font-semibold",
+            stockForLocation > 5 ? "text-green-600" :
+            stockForLocation > 0 ? "text-amber-600" : "text-red-500"
+          )}>
+            {stockForLocation > 0 ? `${stockForLocation} in stock` : "Out of stock"}
+          </span>
+        </div>
+
+        {/* Action Buttons */}
+        <div className="space-y-2 pt-2">
+          <button
+            onClick={handleAddToCart}
+            disabled={!isInStock}
+            className={cn(
+              "w-full flex items-center justify-center gap-2 py-2.5 rounded-lg font-semibold text-sm transition-all",
+              justAdded
+                ? "bg-green-500 text-white"
+                : isInStock
+                ? "bg-secondary hover:bg-secondary/90 text-white"
+                : "bg-neutral-100 text-neutral-400 cursor-not-allowed"
+            )}
+          >
+            {justAdded ? (
+              <>
+                <Check className="h-4 w-4" />
+                <span>Added!</span>
+              </>
+            ) : (
+              <>
+                <ShoppingCart className="h-4 w-4" />
+                <span>Add to Cart</span>
+              </>
+            )}
+          </button>
+
+          <button
+            onClick={handleQuickView}
+            className="w-full flex items-center justify-center gap-2 py-2 rounded-lg font-medium text-sm border border-neutral-200 text-neutral-600 hover:border-neutral-300 hover:bg-neutral-50 transition-all"
+          >
+            <Eye className="h-4 w-4" />
+            <span>Quick View</span>
+          </button>
+        </div>
       </div>
     </Link>
   );

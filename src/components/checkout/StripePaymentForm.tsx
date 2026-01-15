@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import {
   PaymentElement,
   useStripe,
@@ -30,14 +30,10 @@ export function StripePaymentForm({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isReady, setIsReady] = useState(false);
 
-  useEffect(() => {
-    if (elements) {
-      const element = elements.getElement(PaymentElement);
-      if (element) {
-        element.on("ready", () => setIsReady(true));
-      }
-    }
-  }, [elements]);
+  // Handle PaymentElement ready state
+  const handleReady = () => {
+    setIsReady(true);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -84,6 +80,7 @@ export function StripePaymentForm({
     <form onSubmit={handleSubmit} className="space-y-6">
       <div className="border border-neutral-200 rounded-lg p-4">
         <PaymentElement
+          onReady={handleReady}
           options={{
             layout: "tabs",
           }}

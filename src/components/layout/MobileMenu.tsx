@@ -30,8 +30,8 @@ const menuVariants = {
     opacity: 0,
     transition: {
       duration: 0.3,
-      ease: [0.25, 0.1, 0.25, 1],
-      when: "afterChildren",
+      ease: [0.25, 0.1, 0.25, 1] as const,
+      when: "afterChildren" as const,
     },
   },
   open: {
@@ -39,8 +39,8 @@ const menuVariants = {
     opacity: 1,
     transition: {
       duration: 0.4,
-      ease: [0.25, 0.1, 0.25, 1],
-      when: "beforeChildren",
+      ease: [0.25, 0.1, 0.25, 1] as const,
+      when: "beforeChildren" as const,
       staggerChildren: 0.05,
       delayChildren: 0.1,
     },
@@ -56,7 +56,7 @@ const itemVariants = {
   open: {
     opacity: 1,
     x: 0,
-    transition: { duration: 0.3, ease: [0.25, 0.1, 0.25, 1] },
+    transition: { duration: 0.3, ease: [0.25, 0.1, 0.25, 1] as const },
   },
 };
 
@@ -76,7 +76,7 @@ export function MobileMenu({ isOpen, onClose }: MobileMenuProps) {
           <nav className="container mx-auto px-4 py-4">
             {/* Main navigation */}
             <motion.div className="space-y-1">
-              {navItems.map((item, index) => {
+              {navItems.map((item) => {
                 const isActive =
                   pathname === item.href ||
                   (item.href !== "/" && pathname?.startsWith(item.href.split("?")[0]));

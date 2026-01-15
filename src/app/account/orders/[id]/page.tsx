@@ -143,7 +143,7 @@ export default function OrderDetailsPage() {
           {error || "Order not found"}
         </h1>
         <p className="text-neutral-600 mb-6">
-          The order you're looking for doesn't exist or you don't have access to it.
+          The order you&apos;re looking for doesn&apos;t exist or you don&apos;t have access to it.
         </p>
         <Link href="/account/orders">
           <Button>Back to Orders</Button>

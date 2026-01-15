@@ -25,7 +25,6 @@ import {
   StaggerItem,
   HoverLift,
   MagneticButton,
-  ParallaxWrapper,
 } from "@/components/motion";
 
 const services = [

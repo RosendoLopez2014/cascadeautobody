@@ -9,6 +9,7 @@ import { useCartStore } from "@/stores/cartStore";
 import { Navigation } from "./Navigation";
 import { MobileMenu } from "./MobileMenu";
 import { SearchBar } from "./SearchBar";
+import { StoreSelector } from "./StoreSelector";
 import { CartDrawer } from "@/components/cart";
 
 export function Header() {
@@ -32,22 +33,28 @@ export function Header() {
       {/* Top bar */}
       <div className="bg-neutral-900 text-white py-2">
         <div className="container mx-auto px-4 flex justify-between items-center text-sm">
-          <div className="flex items-center gap-6">
-            <motion.a
-              href="tel:+15099728989"
-              className="flex items-center gap-1.5 hover:text-secondary transition-colors"
-              whileHover={{ x: 2 }}
-            >
-              <Phone className="h-3 w-3" />
-              <span className="hidden sm:inline text-neutral-400">Yakima</span> (509) 972-8989
-            </motion.a>
-            <motion.a
-              href="tel:+15098658544"
-              className="flex items-center gap-1.5 hover:text-secondary transition-colors"
-              whileHover={{ x: 2 }}
-            >
-              <span className="hidden sm:inline text-neutral-400">Toppenish</span> (509) 865-8544
-            </motion.a>
+          <div className="flex items-center gap-4">
+            {/* Store Selector */}
+            <StoreSelector />
+
+            {/* Phone Numbers */}
+            <div className="hidden md:flex items-center gap-4 border-l border-white/20 pl-4">
+              <motion.a
+                href="tel:+15099728989"
+                className="flex items-center gap-1.5 hover:text-secondary transition-colors"
+                whileHover={{ x: 2 }}
+              >
+                <Phone className="h-3 w-3" />
+                <span className="text-neutral-400">Yakima</span> (509) 972-8989
+              </motion.a>
+              <motion.a
+                href="tel:+15098658544"
+                className="flex items-center gap-1.5 hover:text-secondary transition-colors"
+                whileHover={{ x: 2 }}
+              >
+                <span className="text-neutral-400">Toppenish</span> (509) 865-8544
+              </motion.a>
+            </div>
           </div>
           <div className="hidden sm:block text-neutral-400">
             Mon-Fri 8am-5:30pm | Sat 9am-2pm

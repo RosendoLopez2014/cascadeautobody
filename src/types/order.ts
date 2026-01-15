@@ -1,4 +1,4 @@
-import { FulfillmentMethod, ShippingAddress } from "./cart";
+import { FulfillmentMethod } from "./cart";
 
 export type OrderStatus =
   | "pending"
@@ -8,6 +8,21 @@ export type OrderStatus =
   | "cancelled"
   | "refunded"
   | "failed";
+
+// WooCommerce address format (snake_case from API)
+export interface WooCommerceAddress {
+  first_name: string;
+  last_name: string;
+  company?: string;
+  address_1: string;
+  address_2?: string;
+  city: string;
+  state: string;
+  postcode: string;
+  country: string;
+  phone?: string;
+  email?: string;
+}
 
 export interface OrderLineItem {
   id: number;
@@ -35,8 +50,8 @@ export interface Order {
   total_tax: string;
   shipping_total: string;
   customer_id: number;
-  billing: ShippingAddress;
-  shipping: ShippingAddress;
+  billing: WooCommerceAddress;
+  shipping: WooCommerceAddress;
   payment_method: string;
   payment_method_title: string;
   line_items: OrderLineItem[];
@@ -48,8 +63,8 @@ export interface CreateOrderRequest {
   payment_method: string;
   payment_method_title: string;
   set_paid: boolean;
-  billing: ShippingAddress;
-  shipping: ShippingAddress;
+  billing: WooCommerceAddress;
+  shipping: WooCommerceAddress;
   line_items: Array<{
     product_id: number;
     quantity: number;

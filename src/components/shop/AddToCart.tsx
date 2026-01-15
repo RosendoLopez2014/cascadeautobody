@@ -5,6 +5,7 @@ import { ShoppingCart, Plus, Minus, Check } from "lucide-react";
 import { Product } from "@/types";
 import { Button } from "@/components/ui";
 import { useCartStore } from "@/stores/cartStore";
+import { useLocationStore, getStockForLocation } from "@/stores/locationStore";
 
 interface AddToCartProps {
   product: Product;
@@ -16,9 +17,12 @@ export function AddToCart({ product, showQuantity = true }: AddToCartProps) {
   const [added, setAdded] = useState(false);
   const addItem = useCartStore((state) => state.addItem);
   const cartItem = useCartStore((state) => state.getItem(product.id));
+  const selectedLocationId = useLocationStore((state) => state.selectedLocationId);
 
-  const isInStock = product.stock_status === "instock";
-  const maxQuantity = product.stock_quantity || 99;
+  // Get stock for selected location
+  const stockForLocation = getStockForLocation(product.stock_quantity, selectedLocationId);
+  const isInStock = stockForLocation > 0;
+  const maxQuantity = stockForLocation || 99;
 
   const handleAddToCart = () => {
     if (isInStock) {
@@ -40,11 +44,20 @@ export function AddToCart({ product, showQuantity = true }: AddToCartProps) {
     }
   };
 
+  const locationName = useLocationStore((state) => state.getLocationName());
+
   if (!isInStock) {
     return (
-      <Button disabled variant="outline" className="w-full">
-        Out of Stock
-      </Button>
+      <div className="space-y-2">
+        <Button disabled variant="outline" className="w-full">
+          Out of Stock at {locationName}
+        </Button>
+        {selectedLocationId === 2 && (
+          <p className="text-sm text-center text-amber-600">
+            Call (509) 865-8544 for Toppenish availability
+          </p>
+        )}
+      </div>
     );
   }
 

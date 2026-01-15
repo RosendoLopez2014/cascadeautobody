@@ -3,10 +3,9 @@
 import Link from "next/link";
 import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
-import { ShoppingCart, Check } from "lucide-react";
+import { ShoppingCart, Check, Eye, CheckCircle, XCircle } from "lucide-react";
 import { Product } from "@/types";
 import { formatPrice } from "@/lib/utils";
-import { InventoryBadge } from "./InventoryBadge";
 import { useCartStore } from "@/stores/cartStore";
 import { useState } from "react";
 
@@ -21,7 +20,13 @@ export function ProductCard({ product, index = 0 }: ProductCardProps) {
   const [justAdded, setJustAdded] = useState(false);
 
   const mainImage = product.images[0];
-  const isInStock = product.stock_status === "instock";
+
+  // Stock for both locations
+  // Yakima = actual WooCommerce stock, Toppenish = 0 for now (will be updated when MicroBiz sync is complete)
+  const yakimaStock = product.stock_quantity ?? 0;
+  const toppenishStock = 0; // Placeholder until MicroBiz integration
+  const totalStock = yakimaStock + toppenishStock;
+  const isInStock = totalStock > 0;
 
   const handleAddToCart = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -31,6 +36,13 @@ export function ProductCard({ product, index = 0 }: ProductCardProps) {
       setJustAdded(true);
       setTimeout(() => setJustAdded(false), 1500);
     }
+  };
+
+  const handleQuickView = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    // Navigate to product page - could be converted to modal later
+    window.location.href = `/shop/product/${product.slug}`;
   };
 
   return (
@@ -48,16 +60,16 @@ export function ProductCard({ product, index = 0 }: ProductCardProps) {
         className="group block"
       >
         <motion.article
-          className="bg-white rounded-2xl border border-neutral-200 overflow-hidden"
-          whileHover={{ y: -6, boxShadow: "0 20px 40px -10px rgba(0,0,0,0.1)" }}
+          className="bg-white rounded-xl border border-neutral-200 overflow-hidden"
+          whileHover={{ y: -4, boxShadow: "0 12px 24px -8px rgba(0,0,0,0.1)" }}
           transition={{ duration: 0.3, ease: [0.25, 0.1, 0.25, 1] }}
         >
-          {/* Image */}
+          {/* Image Container */}
           <div className="relative aspect-square bg-neutral-100 overflow-hidden">
             {mainImage ? (
               <motion.div
                 className="relative w-full h-full"
-                whileHover={{ scale: 1.05 }}
+                whileHover={{ scale: 1.03 }}
                 transition={{ duration: 0.4, ease: [0.25, 0.1, 0.25, 1] }}
               >
                 <Image
@@ -70,88 +82,75 @@ export function ProductCard({ product, index = 0 }: ProductCardProps) {
               </motion.div>
             ) : (
               <div className="absolute inset-0 flex items-center justify-center text-neutral-400">
-                No image
+                <ShoppingCart className="h-12 w-12" />
               </div>
             )}
 
-            {/* Sale badge */}
+            {/* Stock Badge - Top Left */}
+            <motion.div
+              initial={{ opacity: 0, x: -10 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: 0.1 }}
+              className={`absolute top-3 left-3 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-semibold shadow-sm ${
+                isInStock
+                  ? "bg-green-500 text-white"
+                  : "bg-neutral-200 text-neutral-600"
+              }`}
+            >
+              {isInStock ? (
+                <>
+                  <CheckCircle className="h-4 w-4" />
+                  <span>In Stock</span>
+                </>
+              ) : (
+                <>
+                  <XCircle className="h-4 w-4" />
+                  <span>Out of Stock</span>
+                </>
+              )}
+            </motion.div>
+
+            {/* Sale Badge - Top Right */}
             <AnimatePresence>
               {product.on_sale && (
                 <motion.span
-                  initial={{ scale: 0, rotate: -12 }}
-                  animate={{ scale: 1, rotate: 0 }}
+                  initial={{ scale: 0 }}
+                  animate={{ scale: 1 }}
                   exit={{ scale: 0 }}
                   transition={{ type: "spring", stiffness: 400, damping: 20 }}
-                  className="absolute top-3 left-3 bg-secondary text-white text-xs font-bold px-3 py-1.5 rounded-full shadow-lg"
+                  className="absolute top-3 right-3 bg-secondary text-white text-xs font-bold px-3 py-1.5 rounded-full shadow-lg"
                 >
                   Sale
                 </motion.span>
               )}
             </AnimatePresence>
 
-            {/* Quick add button */}
-            {isInStock && (
-              <motion.button
-                onClick={handleAddToCart}
-                className="absolute bottom-3 right-3 p-3 bg-white rounded-full shadow-lg"
-                initial={{ opacity: 0, scale: 0.8, y: 10 }}
-                whileInView={{ opacity: 1, scale: 1, y: 0 }}
-                whileHover={{
-                  scale: 1.1,
-                  backgroundColor: justAdded ? "#22c55e" : "#18181b",
-                }}
-                whileTap={{ scale: 0.95 }}
-                transition={{ duration: 0.2 }}
-                aria-label="Add to cart"
-                style={{
-                  backgroundColor: justAdded ? "#22c55e" : undefined,
-                  color: justAdded ? "white" : undefined,
-                }}
-              >
-                <AnimatePresence mode="wait">
-                  {justAdded ? (
-                    <motion.div
-                      key="check"
-                      initial={{ scale: 0, rotate: -180 }}
-                      animate={{ scale: 1, rotate: 0 }}
-                      exit={{ scale: 0 }}
-                      transition={{ duration: 0.2 }}
-                    >
-                      <Check className="h-5 w-5 text-white" />
-                    </motion.div>
-                  ) : (
-                    <motion.div
-                      key="cart"
-                      initial={{ scale: 0 }}
-                      animate={{ scale: 1 }}
-                      exit={{ scale: 0 }}
-                      className="group-hover:text-white transition-colors"
-                    >
-                      <ShoppingCart className="h-5 w-5" />
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </motion.button>
-            )}
+            {/* Cart indicator badge */}
+            <AnimatePresence>
+              {cartItem && (
+                <motion.div
+                  initial={{ scale: 0 }}
+                  animate={{ scale: 1 }}
+                  exit={{ scale: 0 }}
+                  className="absolute bottom-3 right-3 bg-primary text-white text-xs font-bold px-2.5 py-1 rounded-full shadow-lg flex items-center gap-1"
+                >
+                  <Check className="h-3 w-3" />
+                  {cartItem.quantity}
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
 
           {/* Content */}
-          <div className="p-4">
-            {/* Category */}
-            {product.categories[0] && (
-              <p className="text-xs text-neutral-500 uppercase tracking-wider mb-1.5">
-                {product.categories[0].name}
-              </p>
-            )}
-
-            {/* Title */}
-            <h3 className="font-semibold text-neutral-900 line-clamp-2 mb-2 group-hover:text-primary transition-colors">
+          <div className="p-4 space-y-3">
+            {/* Product Name */}
+            <h3 className="font-bold text-neutral-900 line-clamp-2 group-hover:text-primary transition-colors text-base">
               {product.name}
             </h3>
 
             {/* Price */}
-            <div className="flex items-baseline gap-2 mb-3">
-              <span className="text-lg font-bold text-neutral-900">
+            <div className="flex items-baseline gap-2">
+              <span className="text-xl font-bold text-neutral-900">
                 {formatPrice(product.price)}
               </span>
               {product.on_sale && product.regular_price !== product.price && (
@@ -161,36 +160,83 @@ export function ProductCard({ product, index = 0 }: ProductCardProps) {
               )}
             </div>
 
-            {/* Inventory by location */}
-            {product.inventory_by_location && (
-              <InventoryBadge inventory={product.inventory_by_location} />
-            )}
+            {/* Both Locations Stock Display */}
+            <div className="flex items-center gap-4 text-sm text-neutral-600">
+              <div className="flex items-center gap-1.5">
+                <span className="font-medium">Yakima:</span>
+                <span className={`font-semibold ${
+                  yakimaStock > 5 ? "text-green-600" :
+                  yakimaStock > 0 ? "text-amber-600" : "text-red-500"
+                }`}>
+                  {yakimaStock}
+                </span>
+              </div>
+              <span className="text-neutral-300">|</span>
+              <div className="flex items-center gap-1.5">
+                <span className="font-medium">Toppenish:</span>
+                <span className={`font-semibold ${
+                  toppenishStock > 5 ? "text-green-600" :
+                  toppenishStock > 0 ? "text-amber-600" : "text-red-500"
+                }`}>
+                  {toppenishStock}
+                </span>
+              </div>
+            </div>
 
-            {/* Out of stock message */}
-            {!isInStock && (
-              <motion.p
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                className="text-sm text-red-600 font-medium mt-2"
+            {/* Action Buttons */}
+            <div className="flex gap-2 pt-2">
+              {/* Add to Cart Button */}
+              <motion.button
+                onClick={handleAddToCart}
+                disabled={!isInStock}
+                className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-full font-semibold text-sm transition-all ${
+                  justAdded
+                    ? "bg-green-500 text-white"
+                    : isInStock
+                    ? "bg-secondary hover:bg-secondary/90 text-white"
+                    : "bg-neutral-200 text-neutral-400 cursor-not-allowed"
+                }`}
+                whileHover={isInStock && !justAdded ? { scale: 1.02 } : {}}
+                whileTap={isInStock && !justAdded ? { scale: 0.98 } : {}}
               >
-                Out of Stock
-              </motion.p>
-            )}
+                <AnimatePresence mode="wait">
+                  {justAdded ? (
+                    <motion.div
+                      key="added"
+                      initial={{ scale: 0 }}
+                      animate={{ scale: 1 }}
+                      exit={{ scale: 0 }}
+                      className="flex items-center gap-2"
+                    >
+                      <Check className="h-4 w-4" />
+                      <span>Added!</span>
+                    </motion.div>
+                  ) : (
+                    <motion.div
+                      key="add"
+                      initial={{ scale: 0 }}
+                      animate={{ scale: 1 }}
+                      exit={{ scale: 0 }}
+                      className="flex items-center gap-2"
+                    >
+                      <ShoppingCart className="h-4 w-4" />
+                      <span>Add to Cart</span>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </motion.button>
 
-            {/* Cart indicator */}
-            <AnimatePresence>
-              {cartItem && (
-                <motion.p
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -10 }}
-                  className="text-sm text-primary font-medium mt-2 flex items-center gap-1"
-                >
-                  <Check className="h-3.5 w-3.5" />
-                  {cartItem.quantity} in cart
-                </motion.p>
-              )}
-            </AnimatePresence>
+              {/* Quick View Button */}
+              <motion.button
+                onClick={handleQuickView}
+                className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-full font-semibold text-sm border-2 border-neutral-300 text-neutral-700 hover:border-neutral-400 hover:bg-neutral-50 transition-all"
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+              >
+                <Eye className="h-4 w-4" />
+                <span>Quick View</span>
+              </motion.button>
+            </div>
           </div>
         </motion.article>
       </Link>

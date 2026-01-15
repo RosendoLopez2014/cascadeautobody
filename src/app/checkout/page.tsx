@@ -11,13 +11,12 @@ import {
   Package,
   MapPin,
   Check,
-  CreditCard,
-  ShieldCheck,
 } from "lucide-react";
 import { Button, Input } from "@/components/ui";
 import { StripeProvider, PaymentForm } from "@/components/checkout";
 import { useCartStore } from "@/stores/cartStore";
 import { useAuthStore } from "@/stores/authStore";
+import { useLocationStore } from "@/stores/locationStore";
 import { formatPrice } from "@/lib/utils";
 import { LOCATIONS } from "@/lib/woocommerce";
 
@@ -43,9 +42,14 @@ export default function CheckoutPage() {
   const { items, getSubtotal, getItemCount, clearCart } = useCartStore();
   const { user, isAuthenticated } = useAuthStore();
 
+  // Get selected store from header - pickup location matches shopping location
+  const selectedLocationId = useLocationStore((state) => state.selectedLocationId);
+  const selectedLocationName = selectedLocationId === 1 ? LOCATIONS.YAKIMA.name : LOCATIONS.TOPPENISH.name;
+  const selectedLocationInfo = selectedLocationId === 1 ? LOCATIONS.YAKIMA : LOCATIONS.TOPPENISH;
+
   const [step, setStep] = useState(1);
   const [fulfillmentType, setFulfillmentType] = useState<FulfillmentType>("pickup");
-  const [pickupLocation, setPickupLocation] = useState<number>(LOCATIONS.YAKIMA.id);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [isProcessing, setIsProcessing] = useState(false);
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [paymentError, setPaymentError] = useState<string | null>(null);
@@ -153,9 +157,7 @@ export default function CheckoutPage() {
           customerEmail: customerInfo.email,
           metadata: {
             fulfillmentType,
-            pickupLocation: fulfillmentType === "pickup"
-              ? (pickupLocation === LOCATIONS.YAKIMA.id ? "Yakima" : "Toppenish")
-              : undefined,
+            pickupLocation: fulfillmentType === "pickup" ? selectedLocationName : undefined,
             shippingAddress: fulfillmentType !== "pickup"
               ? `${shippingAddress.address1}, ${shippingAddress.city}, ${shippingAddress.state} ${shippingAddress.zipCode}`
               : undefined,
@@ -173,7 +175,7 @@ export default function CheckoutPage() {
       console.error("Error fetching payment intent:", error);
       setPaymentError("Failed to initialize payment");
     }
-  }, [items, shippingCost, taxAmount, customerInfo.email, fulfillmentType, pickupLocation, shippingAddress]);
+  }, [items, shippingCost, taxAmount, customerInfo.email, fulfillmentType, selectedLocationName, shippingAddress]);
 
   // Trigger payment intent fetch when reaching step 3
   useEffect(() => {
@@ -195,7 +197,7 @@ export default function CheckoutPage() {
           customerId: user?.id, // Link order to logged-in user
           customerInfo,
           fulfillmentType,
-          pickupLocation: fulfillmentType === "pickup" ? pickupLocation : undefined,
+          pickupLocation: fulfillmentType === "pickup" ? selectedLocationId : undefined,
           shippingAddress: fulfillmentType !== "pickup" ? shippingAddress : undefined,
           items: items.map((item) => ({
             productId: item.product.id,
@@ -413,7 +415,7 @@ export default function CheckoutPage() {
                           <span className="text-green-600 font-medium">Free</span>
                         </div>
                         <p className="text-sm text-neutral-600 mt-1">
-                          Pick up at Yakima or Toppenish location
+                          Pick up at {selectedLocationName} location
                         </p>
                       </div>
                     </label>
@@ -505,43 +507,26 @@ export default function CheckoutPage() {
                     </label>
                   </div>
 
-                  {/* Pickup Location Selection */}
+                  {/* Pickup Location Display - matches store selected in header */}
                   {fulfillmentType === "pickup" && (
-                    <div className="space-y-3">
-                      <h3 className="font-medium text-neutral-900">
-                        Select Pickup Location
-                      </h3>
-                      {Object.values(LOCATIONS).map((location) => (
-                        <label
-                          key={location.id}
-                          className={`flex items-start gap-4 p-4 border rounded-lg cursor-pointer transition-colors ${
-                            pickupLocation === location.id
-                              ? "border-primary bg-primary-50"
-                              : "border-neutral-200 hover:border-neutral-300"
-                          }`}
-                        >
-                          <input
-                            type="radio"
-                            name="pickup-location"
-                            value={location.id}
-                            checked={pickupLocation === location.id}
-                            onChange={() => setPickupLocation(location.id)}
-                            className="mt-1"
-                          />
-                          <MapPin className="h-5 w-5 text-primary mt-0.5 flex-shrink-0" />
-                          <div>
-                            <span className="font-medium text-neutral-900">
-                              {location.name}
-                            </span>
-                            <p className="text-sm text-neutral-600">
-                              {location.address}
-                            </p>
-                            <p className="text-xs text-neutral-500 mt-1">
-                              Mon-Fri 8am-5:30pm | Sat 9am-2pm
-                            </p>
-                          </div>
-                        </label>
-                      ))}
+                    <div className="p-4 border border-primary rounded-lg bg-primary-50">
+                      <div className="flex items-start gap-3">
+                        <MapPin className="h-5 w-5 text-primary mt-0.5 flex-shrink-0" />
+                        <div>
+                          <h3 className="font-medium text-neutral-900">
+                            Pickup at {selectedLocationName}
+                          </h3>
+                          <p className="text-sm text-neutral-600 mt-1">
+                            {selectedLocationInfo.address}
+                          </p>
+                          <p className="text-xs text-neutral-500 mt-1">
+                            Mon-Fri 8am-5:30pm | Sat 9am-2pm
+                          </p>
+                          <p className="text-xs text-primary mt-2">
+                            Based on your selected store. Change it in the header if needed.
+                          </p>
+                        </div>
+                      </div>
                     </div>
                   )}
 
@@ -616,12 +601,7 @@ export default function CheckoutPage() {
               {step > 2 && (
                 <div className="p-4 text-sm text-neutral-600">
                   {fulfillmentType === "pickup" ? (
-                    <>
-                      Store Pickup at{" "}
-                      {pickupLocation === LOCATIONS.YAKIMA.id
-                        ? LOCATIONS.YAKIMA.name
-                        : LOCATIONS.TOPPENISH.name}
-                    </>
+                    <>Store Pickup at {selectedLocationName}</>
                   ) : (
                     <>
                       {fulfillmentType === "delivery"

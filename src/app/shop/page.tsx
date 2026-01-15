@@ -1,10 +1,5 @@
-import { Suspense } from "react";
 import { Metadata } from "next";
-import Link from "next/link";
 import { woocommerce } from "@/lib/woocommerce";
-import { ProductGridWithToggle } from "@/components/shop";
-import { LoadingScreen } from "@/components/ui";
-import { Package, ChevronRight, Grid3X3 } from "lucide-react";
 import { ShopPageClient } from "./ShopPageClient";
 
 export const metadata: Metadata = {
