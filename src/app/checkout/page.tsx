@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
@@ -15,7 +15,9 @@ import {
   ShieldCheck,
 } from "lucide-react";
 import { Button, Input } from "@/components/ui";
+import { StripeProvider, PaymentForm } from "@/components/checkout";
 import { useCartStore } from "@/stores/cartStore";
+import { useAuthStore } from "@/stores/authStore";
 import { formatPrice } from "@/lib/utils";
 import { LOCATIONS } from "@/lib/woocommerce";
 
@@ -39,11 +41,14 @@ interface ShippingAddress {
 export default function CheckoutPage() {
   const router = useRouter();
   const { items, getSubtotal, getItemCount, clearCart } = useCartStore();
+  const { user, isAuthenticated } = useAuthStore();
 
   const [step, setStep] = useState(1);
   const [fulfillmentType, setFulfillmentType] = useState<FulfillmentType>("pickup");
   const [pickupLocation, setPickupLocation] = useState<number>(LOCATIONS.YAKIMA.id);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [clientSecret, setClientSecret] = useState<string | null>(null);
+  const [paymentError, setPaymentError] = useState<string | null>(null);
 
   const [customerInfo, setCustomerInfo] = useState<CustomerInfo>({
     email: "",
@@ -60,6 +65,32 @@ export default function CheckoutPage() {
     zipCode: "",
   });
 
+  // Auto-fill user info when logged in
+  useEffect(() => {
+    if (isAuthenticated && user) {
+      setCustomerInfo({
+        email: user.email || "",
+        firstName: user.first_name || "",
+        lastName: user.last_name || "",
+        phone: user.billing?.phone || "",
+      });
+
+      // Also fill shipping address if available
+      if (user.billing || user.shipping) {
+        const addr = user.shipping || user.billing;
+        if (addr) {
+          setShippingAddress({
+            address1: addr.address_1 || "",
+            address2: addr.address_2 || "",
+            city: addr.city || "",
+            state: addr.state || "WA",
+            zipCode: addr.postcode || "",
+          });
+        }
+      }
+    }
+  }, [isAuthenticated, user]);
+
   const subtotal = getSubtotal();
   const itemCount = getItemCount();
 
@@ -75,23 +106,6 @@ export default function CheckoutPage() {
   const taxRate = 0.085; // 8.5% WA state tax
   const taxAmount = subtotal * taxRate;
   const total = subtotal + shippingCost + taxAmount;
-
-  // Redirect if cart is empty
-  if (items.length === 0) {
-    return (
-      <div className="container mx-auto px-4 py-16 text-center">
-        <h1 className="text-2xl font-bold text-neutral-900 mb-4">
-          Your cart is empty
-        </h1>
-        <p className="text-neutral-600 mb-8">
-          Add some items to your cart before checking out.
-        </p>
-        <Link href="/shop">
-          <Button>Continue Shopping</Button>
-        </Link>
-      </div>
-    );
-  }
 
   const handleCustomerInfoChange = (field: keyof CustomerInfo, value: string) => {
     setCustomerInfo((prev) => ({ ...prev, [field]: value }));
@@ -120,22 +134,118 @@ export default function CheckoutPage() {
     );
   };
 
-  const handlePlaceOrder = async () => {
+  // Fetch payment intent when reaching step 3 (React Best Practice 5.3)
+  // Use functional pattern to avoid stale closures
+  const fetchPaymentIntent = useCallback(async () => {
+    try {
+      const response = await fetch("/api/checkout/create-payment-intent", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          items: items.map((item) => ({
+            productId: item.product.id,
+            name: item.product.name,
+            price: parseFloat(item.product.price),
+            quantity: item.quantity,
+          })),
+          shippingCost,
+          taxAmount,
+          customerEmail: customerInfo.email,
+          metadata: {
+            fulfillmentType,
+            pickupLocation: fulfillmentType === "pickup"
+              ? (pickupLocation === LOCATIONS.YAKIMA.id ? "Yakima" : "Toppenish")
+              : undefined,
+            shippingAddress: fulfillmentType !== "pickup"
+              ? `${shippingAddress.address1}, ${shippingAddress.city}, ${shippingAddress.state} ${shippingAddress.zipCode}`
+              : undefined,
+          },
+        }),
+      });
+
+      const data = await response.json();
+      if (data.clientSecret) {
+        setClientSecret(data.clientSecret);
+      } else {
+        setPaymentError("Failed to initialize payment");
+      }
+    } catch (error) {
+      console.error("Error fetching payment intent:", error);
+      setPaymentError("Failed to initialize payment");
+    }
+  }, [items, shippingCost, taxAmount, customerInfo.email, fulfillmentType, pickupLocation, shippingAddress]);
+
+  // Trigger payment intent fetch when reaching step 3
+  useEffect(() => {
+    if (step === 3 && !clientSecret && items.length > 0) {
+      fetchPaymentIntent();
+    }
+  }, [step, clientSecret, items.length, fetchPaymentIntent]);
+
+  const handlePaymentSuccess = async (paymentIntentId: string) => {
     setIsProcessing(true);
 
     try {
-      // TODO: Create order via WooCommerce API and process payment via Stripe
-      // For now, simulate order placement
-      await new Promise((resolve) => setTimeout(resolve, 2000));
+      // Create order in WooCommerce (will auto-complete for MicroBiz sync)
+      const response = await fetch("/api/checkout/create-order", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          paymentIntentId,
+          customerId: user?.id, // Link order to logged-in user
+          customerInfo,
+          fulfillmentType,
+          pickupLocation: fulfillmentType === "pickup" ? pickupLocation : undefined,
+          shippingAddress: fulfillmentType !== "pickup" ? shippingAddress : undefined,
+          items: items.map((item) => ({
+            productId: item.product.id,
+            name: item.product.name,
+            price: parseFloat(item.product.price),
+            quantity: item.quantity,
+          })),
+          shippingCost,
+          taxAmount,
+          total,
+        }),
+      });
 
-      // Clear cart and redirect to confirmation
-      clearCart();
-      router.push("/checkout/confirmation?order=12345");
+      const data = await response.json();
+
+      if (data.orderId) {
+        clearCart();
+        router.push(`/checkout/confirmation?order=${data.orderNumber}`);
+      } else {
+        setPaymentError("Order creation failed. Please contact support.");
+        setIsProcessing(false);
+      }
     } catch (error) {
-      console.error("Order placement failed:", error);
+      console.error("Order creation failed:", error);
+      setPaymentError("Order creation failed. Please contact support.");
       setIsProcessing(false);
     }
   };
+
+  const handlePaymentError = (error: string) => {
+    setPaymentError(error);
+    setIsProcessing(false);
+  };
+
+  // Redirect if cart is empty (must be after all hooks)
+  if (items.length === 0) {
+    return (
+      <div className="container mx-auto px-4 py-16 text-center">
+        <h1 className="text-2xl font-bold text-neutral-900 mb-4">
+          Your cart is empty
+        </h1>
+        <p className="text-neutral-600 mb-8">
+          Add some items to your cart before checking out.
+        </p>
+        <Link href="/shop">
+          <Button>Continue Shopping</Button>
+        </Link>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-neutral-50">
@@ -542,58 +652,26 @@ export default function CheckoutPage() {
 
               {step === 3 && (
                 <div className="p-6 space-y-6">
-                  {/* Placeholder for Stripe Elements */}
-                  <div className="border border-neutral-200 rounded-lg p-4">
-                    <div className="flex items-center gap-2 mb-4">
-                      <CreditCard className="h-5 w-5 text-neutral-400" />
-                      <span className="font-medium text-neutral-900">
-                        Credit or Debit Card
-                      </span>
+                  {paymentError && (
+                    <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
+                      <p className="text-sm text-red-700">{paymentError}</p>
                     </div>
-                    <div className="space-y-4">
-                      <Input
-                        label="Card Number"
-                        placeholder="4242 4242 4242 4242"
-                        disabled={isProcessing}
+                  )}
+
+                  {clientSecret ? (
+                    <StripeProvider clientSecret={clientSecret}>
+                      <PaymentForm
+                        total={total}
+                        onSuccess={handlePaymentSuccess}
+                        onError={handlePaymentError}
                       />
-                      <div className="grid grid-cols-2 gap-4">
-                        <Input
-                          label="Expiry Date"
-                          placeholder="MM / YY"
-                          disabled={isProcessing}
-                        />
-                        <Input
-                          label="CVC"
-                          placeholder="123"
-                          disabled={isProcessing}
-                        />
-                      </div>
+                    </StripeProvider>
+                  ) : (
+                    <div className="flex items-center justify-center p-8">
+                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mr-3" />
+                      <span className="text-neutral-600">Loading payment form...</span>
                     </div>
-                  </div>
-
-                  <div className="flex items-start gap-2 p-3 bg-green-50 rounded-lg">
-                    <ShieldCheck className="h-5 w-5 text-green-600 flex-shrink-0 mt-0.5" />
-                    <p className="text-sm text-green-800">
-                      Your payment information is encrypted and secure. We never
-                      store your card details.
-                    </p>
-                  </div>
-
-                  <Button
-                    onClick={handlePlaceOrder}
-                    disabled={isProcessing}
-                    className="w-full"
-                    size="lg"
-                  >
-                    {isProcessing ? (
-                      <>
-                        <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2" />
-                        Processing...
-                      </>
-                    ) : (
-                      <>Place Order - {formatPrice(total)}</>
-                    )}
-                  </Button>
+                  )}
                 </div>
               )}
             </div>

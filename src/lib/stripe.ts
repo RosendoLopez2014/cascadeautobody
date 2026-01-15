@@ -10,7 +10,7 @@ export function getStripe(): Stripe {
       throw new Error("STRIPE_SECRET_KEY is not configured");
     }
     stripeInstance = new Stripe(key, {
-      apiVersion: "2025-12-15.clover",
+      apiVersion: "2024-12-18.acacia",
       typescript: true,
     });
   }
@@ -19,6 +19,9 @@ export function getStripe(): Stripe {
 
 // For backwards compatibility (will throw if no key is set)
 export const stripe = {
+  get instance() {
+    return getStripe();
+  },
   get paymentIntents() {
     return getStripe().paymentIntents;
   },

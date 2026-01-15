@@ -20,6 +20,10 @@ const nextConfig = {
   // Optimize for production
   poweredByHeader: false,
   compress: true,
+  // Optimize barrel imports for faster dev boot and builds (React Best Practice 2.1)
+  experimental: {
+    optimizePackageImports: ["lucide-react", "@stripe/react-stripe-js"],
+  },
 };
 
 export default nextConfig;
