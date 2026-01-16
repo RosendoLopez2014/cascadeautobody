@@ -13,14 +13,12 @@ import {
   Check,
 } from "lucide-react";
 import { Button, Input } from "@/components/ui";
-import { StripeProvider, PaymentForm } from "@/components/checkout";
+import { StripeProvider, PaymentForm, CartItemWithFulfillment } from "@/components/checkout";
 import { useCartStore } from "@/stores/cartStore";
 import { useAuthStore } from "@/stores/authStore";
 import { useLocationStore } from "@/stores/locationStore";
 import { formatPrice } from "@/lib/utils";
-import { LOCATIONS } from "@/lib/woocommerce";
 
-type FulfillmentType = "pickup" | "delivery" | "shipping";
 
 interface CustomerInfo {
   email: string;
@@ -29,26 +27,18 @@ interface CustomerInfo {
   phone: string;
 }
 
-interface ShippingAddress {
-  address1: string;
-  address2: string;
-  city: string;
-  state: string;
-  zipCode: string;
-}
 
 export default function CheckoutPage() {
   const router = useRouter();
   const { items, getSubtotal, getItemCount, clearCart } = useCartStore();
   const { user, isAuthenticated } = useAuthStore();
 
-  // Get selected store from header - pickup location matches shopping location
+  // Get selected store from header
   const selectedLocationId = useLocationStore((state) => state.selectedLocationId);
-  const selectedLocationName = selectedLocationId === 1 ? LOCATIONS.YAKIMA.name : LOCATIONS.TOPPENISH.name;
-  const selectedLocationInfo = selectedLocationId === 1 ? LOCATIONS.YAKIMA : LOCATIONS.TOPPENISH;
 
   const [step, setStep] = useState(1);
-  const [fulfillmentType, setFulfillmentType] = useState<FulfillmentType>("pickup");
+  const updateItemFulfillment = useCartStore((state) => state.updateItemFulfillment);
+  const updateItemShippingCost = useCartStore((state) => state.updateItemShippingCost);
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [isProcessing, setIsProcessing] = useState(false);
   const [clientSecret, setClientSecret] = useState<string | null>(null);
@@ -61,13 +51,6 @@ export default function CheckoutPage() {
     phone: "",
   });
 
-  const [shippingAddress, setShippingAddress] = useState<ShippingAddress>({
-    address1: "",
-    address2: "",
-    city: "",
-    state: "WA",
-    zipCode: "",
-  });
 
   // Auto-fill user info when logged in
   useEffect(() => {
@@ -78,32 +61,29 @@ export default function CheckoutPage() {
         lastName: user.last_name || "",
         phone: user.billing?.phone || "",
       });
-
-      // Also fill shipping address if available
-      if (user.billing || user.shipping) {
-        const addr = user.shipping || user.billing;
-        if (addr) {
-          setShippingAddress({
-            address1: addr.address_1 || "",
-            address2: addr.address_2 || "",
-            city: addr.city || "",
-            state: addr.state || "WA",
-            zipCode: addr.postcode || "",
-          });
-        }
-      }
     }
   }, [isAuthenticated, user]);
 
   const subtotal = getSubtotal();
   const itemCount = getItemCount();
 
-  // Calculate shipping/delivery costs
+  // Check if there are items needing shipping cost calculation
+  const itemsNeedingShippingCalculation = items.filter(
+    (item) => item.fulfillment?.method === "shipping" && item.shippingCost === undefined
+  );
+  const hasItemsNeedingShippingCalculation = itemsNeedingShippingCalculation.length > 0;
+
+  // Calculate total shipping from all items with their individual fulfillment
   const getShippingCost = () => {
-    if (fulfillmentType === "pickup") return 0;
-    if (fulfillmentType === "delivery") return subtotal >= 100 ? 0 : 15;
-    // Standard shipping - simplified calculation
-    return subtotal >= 150 ? 0 : 12.99;
+    return items.reduce((total, item) => {
+      if (item.fulfillment?.method === "pickup" || item.fulfillment?.method === "delivery") {
+        return total;
+      }
+      if (item.fulfillment?.method === "shipping" && item.shippingCost !== undefined) {
+        return total + item.shippingCost;
+      }
+      return total;
+    }, 0);
   };
 
   const shippingCost = getShippingCost();
@@ -115,10 +95,6 @@ export default function CheckoutPage() {
     setCustomerInfo((prev) => ({ ...prev, [field]: value }));
   };
 
-  const handleAddressChange = (field: keyof ShippingAddress, value: string) => {
-    setShippingAddress((prev) => ({ ...prev, [field]: value }));
-  };
-
   const validateStep1 = () => {
     return (
       customerInfo.email &&
@@ -128,14 +104,15 @@ export default function CheckoutPage() {
     );
   };
 
-  const validateStep2 = () => {
-    if (fulfillmentType === "pickup") return true;
-    return (
-      shippingAddress.address1 &&
-      shippingAddress.city &&
-      shippingAddress.state &&
-      shippingAddress.zipCode
-    );
+
+  const handleCalculateShipping = () => {
+    // Calculate shipping for items needing it
+    // Using standard shipping rate: $12.99 for orders under $150, free for $150+
+    const shippingRate = subtotal >= 150 ? 0 : 12.99;
+
+    itemsNeedingShippingCalculation.forEach((item) => {
+      updateItemShippingCost(item.product.id, shippingRate);
+    });
   };
 
   // Fetch payment intent when reaching step 3 (React Best Practice 5.3)
@@ -151,17 +128,12 @@ export default function CheckoutPage() {
             name: item.product.name,
             price: parseFloat(item.product.price),
             quantity: item.quantity,
+            fulfillment: item.fulfillment,
+            shippingCost: item.shippingCost,
           })),
           shippingCost,
           taxAmount,
           customerEmail: customerInfo.email,
-          metadata: {
-            fulfillmentType,
-            pickupLocation: fulfillmentType === "pickup" ? selectedLocationName : undefined,
-            shippingAddress: fulfillmentType !== "pickup"
-              ? `${shippingAddress.address1}, ${shippingAddress.city}, ${shippingAddress.state} ${shippingAddress.zipCode}`
-              : undefined,
-          },
         }),
       });
 
@@ -175,7 +147,7 @@ export default function CheckoutPage() {
       console.error("Error fetching payment intent:", error);
       setPaymentError("Failed to initialize payment");
     }
-  }, [items, shippingCost, taxAmount, customerInfo.email, fulfillmentType, selectedLocationName, shippingAddress]);
+  }, [items, shippingCost, taxAmount, customerInfo.email]);
 
   // Trigger payment intent fetch when reaching step 3
   useEffect(() => {
@@ -196,14 +168,13 @@ export default function CheckoutPage() {
           paymentIntentId,
           customerId: user?.id, // Link order to logged-in user
           customerInfo,
-          fulfillmentType,
-          pickupLocation: fulfillmentType === "pickup" ? selectedLocationId : undefined,
-          shippingAddress: fulfillmentType !== "pickup" ? shippingAddress : undefined,
           items: items.map((item) => ({
             productId: item.product.id,
             name: item.product.name,
             price: parseFloat(item.product.price),
             quantity: item.quantity,
+            fulfillment: item.fulfillment,
+            shippingCost: item.shippingCost,
           })),
           shippingCost,
           taxAmount,
@@ -359,7 +330,7 @@ export default function CheckoutPage() {
               )}
             </div>
 
-            {/* Step 2: Fulfillment Options */}
+            {/* Step 2: Item Fulfillment Selection */}
             <div className="bg-white rounded-lg border border-neutral-200 overflow-hidden">
               <div className="p-4 bg-neutral-50 border-b border-neutral-200 flex items-center justify-between">
                 <div className="flex items-center gap-3">
@@ -373,244 +344,56 @@ export default function CheckoutPage() {
                     {step > 2 ? <Check className="h-4 w-4" /> : "2"}
                   </span>
                   <h2 className="font-semibold text-neutral-900">
-                    Fulfillment Method
+                    Item Fulfillment
                   </h2>
                 </div>
-                {step > 2 && (
-                  <button
-                    onClick={() => setStep(2)}
-                    className="text-sm text-primary hover:underline"
-                  >
-                    Edit
-                  </button>
-                )}
               </div>
 
               {step === 2 && (
                 <div className="p-6 space-y-6">
-                  {/* Fulfillment Options */}
-                  <div className="space-y-3">
-                    {/* Store Pickup */}
-                    <label
-                      className={`flex items-start gap-4 p-4 border rounded-lg cursor-pointer transition-colors ${
-                        fulfillmentType === "pickup"
-                          ? "border-primary bg-primary-50"
-                          : "border-neutral-200 hover:border-neutral-300"
-                      }`}
-                    >
-                      <input
-                        type="radio"
-                        name="fulfillment"
-                        value="pickup"
-                        checked={fulfillmentType === "pickup"}
-                        onChange={() => setFulfillmentType("pickup")}
-                        className="mt-1"
+                  <div className="space-y-4">
+                    {items.map((item) => (
+                      <CartItemWithFulfillment
+                        key={item.product.id}
+                        item={item}
+                        onFulfillmentChange={(fulfillment) =>
+                          updateItemFulfillment(item.product.id, fulfillment)
+                        }
                       />
-                      <Store className="h-5 w-5 text-primary mt-0.5 flex-shrink-0" />
-                      <div className="flex-1">
-                        <div className="flex items-center justify-between">
-                          <span className="font-medium text-neutral-900">
-                            Store Pickup
-                          </span>
-                          <span className="text-green-600 font-medium">Free</span>
-                        </div>
-                        <p className="text-sm text-neutral-600 mt-1">
-                          Pick up at {selectedLocationName} location
-                        </p>
-                      </div>
-                    </label>
-
-                    {/* Local Delivery */}
-                    <label
-                      className={`flex items-start gap-4 p-4 border rounded-lg cursor-pointer transition-colors ${
-                        fulfillmentType === "delivery"
-                          ? "border-primary bg-primary-50"
-                          : "border-neutral-200 hover:border-neutral-300"
-                      }`}
-                    >
-                      <input
-                        type="radio"
-                        name="fulfillment"
-                        value="delivery"
-                        checked={fulfillmentType === "delivery"}
-                        onChange={() => setFulfillmentType("delivery")}
-                        className="mt-1"
-                      />
-                      <Truck className="h-5 w-5 text-primary mt-0.5 flex-shrink-0" />
-                      <div className="flex-1">
-                        <div className="flex items-center justify-between">
-                          <span className="font-medium text-neutral-900">
-                            Local Delivery
-                          </span>
-                          <span
-                            className={
-                              subtotal >= 100
-                                ? "text-green-600 font-medium"
-                                : "text-neutral-900"
-                            }
-                          >
-                            {subtotal >= 100 ? "Free" : "$15.00"}
-                          </span>
-                        </div>
-                        <p className="text-sm text-neutral-600 mt-1">
-                          Same-day delivery in Yakima Valley area
-                          {subtotal < 100 && (
-                            <span className="block text-xs text-primary mt-1">
-                              Free delivery on orders over $100
-                            </span>
-                          )}
-                        </p>
-                      </div>
-                    </label>
-
-                    {/* Shipping */}
-                    <label
-                      className={`flex items-start gap-4 p-4 border rounded-lg cursor-pointer transition-colors ${
-                        fulfillmentType === "shipping"
-                          ? "border-primary bg-primary-50"
-                          : "border-neutral-200 hover:border-neutral-300"
-                      }`}
-                    >
-                      <input
-                        type="radio"
-                        name="fulfillment"
-                        value="shipping"
-                        checked={fulfillmentType === "shipping"}
-                        onChange={() => setFulfillmentType("shipping")}
-                        className="mt-1"
-                      />
-                      <Package className="h-5 w-5 text-primary mt-0.5 flex-shrink-0" />
-                      <div className="flex-1">
-                        <div className="flex items-center justify-between">
-                          <span className="font-medium text-neutral-900">
-                            Standard Shipping
-                          </span>
-                          <span
-                            className={
-                              subtotal >= 150
-                                ? "text-green-600 font-medium"
-                                : "text-neutral-900"
-                            }
-                          >
-                            {subtotal >= 150 ? "Free" : "$12.99"}
-                          </span>
-                        </div>
-                        <p className="text-sm text-neutral-600 mt-1">
-                          5-7 business days
-                          {subtotal < 150 && (
-                            <span className="block text-xs text-primary mt-1">
-                              Free shipping on orders over $150
-                            </span>
-                          )}
-                        </p>
-                      </div>
-                    </label>
+                    ))}
                   </div>
 
-                  {/* Pickup Location Display - matches store selected in header */}
-                  {fulfillmentType === "pickup" && (
-                    <div className="p-4 border border-primary rounded-lg bg-primary-50">
-                      <div className="flex items-start gap-3">
-                        <MapPin className="h-5 w-5 text-primary mt-0.5 flex-shrink-0" />
-                        <div>
-                          <h3 className="font-medium text-neutral-900">
-                            Pickup at {selectedLocationName}
-                          </h3>
-                          <p className="text-sm text-neutral-600 mt-1">
-                            {selectedLocationInfo.address}
-                          </p>
-                          <p className="text-xs text-neutral-500 mt-1">
-                            Mon-Fri 8am-5:30pm | Sat 9am-2pm
-                          </p>
-                          <p className="text-xs text-primary mt-2">
-                            Based on your selected store. Change it in the header if needed.
-                          </p>
-                        </div>
-                      </div>
+                  {hasItemsNeedingShippingCalculation && (
+                    <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
+                      <p className="text-sm text-amber-800">
+                        Please calculate shipping costs for all items before continuing.
+                      </p>
                     </div>
                   )}
 
-                  {/* Delivery/Shipping Address */}
-                  {(fulfillmentType === "delivery" ||
-                    fulfillmentType === "shipping") && (
-                    <div className="space-y-4">
-                      <h3 className="font-medium text-neutral-900">
-                        {fulfillmentType === "delivery"
-                          ? "Delivery Address"
-                          : "Shipping Address"}
-                      </h3>
-                      <Input
-                        label="Street Address"
-                        placeholder="123 Main St"
-                        value={shippingAddress.address1}
-                        onChange={(e) =>
-                          handleAddressChange("address1", e.target.value)
-                        }
-                        required
-                      />
-                      <Input
-                        label="Apartment, suite, etc. (optional)"
-                        placeholder="Apt 4B"
-                        value={shippingAddress.address2}
-                        onChange={(e) =>
-                          handleAddressChange("address2", e.target.value)
-                        }
-                      />
-                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-                        <Input
-                          label="City"
-                          placeholder="Yakima"
-                          value={shippingAddress.city}
-                          onChange={(e) =>
-                            handleAddressChange("city", e.target.value)
-                          }
-                          required
-                        />
-                        <Input
-                          label="State"
-                          placeholder="WA"
-                          value={shippingAddress.state}
-                          onChange={(e) =>
-                            handleAddressChange("state", e.target.value)
-                          }
-                          required
-                        />
-                        <Input
-                          label="ZIP Code"
-                          placeholder="98901"
-                          value={shippingAddress.zipCode}
-                          onChange={(e) =>
-                            handleAddressChange("zipCode", e.target.value)
-                          }
-                          required
-                        />
-                      </div>
-                    </div>
-                  )}
-
-                  <Button
-                    onClick={() => setStep(3)}
-                    disabled={!validateStep2()}
-                    className="w-full sm:w-auto"
-                  >
-                    Continue to Payment
-                  </Button>
+                  <div className="flex gap-3">
+                    {hasItemsNeedingShippingCalculation ? (
+                      <Button
+                        onClick={handleCalculateShipping}
+                        className="w-full sm:w-auto"
+                      >
+                        Calculate Shipping Costs
+                      </Button>
+                    ) : (
+                      <Button
+                        onClick={() => setStep(3)}
+                        className="w-full sm:w-auto"
+                      >
+                        Continue to Payment
+                      </Button>
+                    )}
+                  </div>
                 </div>
               )}
 
               {step > 2 && (
                 <div className="p-4 text-sm text-neutral-600">
-                  {fulfillmentType === "pickup" ? (
-                    <>Store Pickup at {selectedLocationName}</>
-                  ) : (
-                    <>
-                      {fulfillmentType === "delivery"
-                        ? "Local Delivery"
-                        : "Shipping"}{" "}
-                      to {shippingAddress.address1}, {shippingAddress.city},{" "}
-                      {shippingAddress.state} {shippingAddress.zipCode}
-                    </>
-                  )}
+                  {items.length} item{items.length !== 1 ? "s" : ""} configured
                 </div>
               )}
             </div>
@@ -712,24 +495,14 @@ export default function CheckoutPage() {
                   </span>
                   <span className="text-neutral-900">{formatPrice(subtotal)}</span>
                 </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-neutral-600">
-                    {fulfillmentType === "pickup"
-                      ? "Store Pickup"
-                      : fulfillmentType === "delivery"
-                      ? "Local Delivery"
-                      : "Shipping"}
-                  </span>
-                  <span
-                    className={
-                      shippingCost === 0
-                        ? "text-green-600 font-medium"
-                        : "text-neutral-900"
-                    }
-                  >
-                    {shippingCost === 0 ? "Free" : formatPrice(shippingCost)}
-                  </span>
-                </div>
+                {shippingCost > 0 && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-neutral-600">Shipping</span>
+                    <span className="text-neutral-900">
+                      {formatPrice(shippingCost)}
+                    </span>
+                  </div>
+                )}
                 <div className="flex justify-between text-sm">
                   <span className="text-neutral-600">Tax (8.5%)</span>
                   <span className="text-neutral-900">{formatPrice(taxAmount)}</span>

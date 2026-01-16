@@ -1,11 +1,11 @@
 import { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ChevronRight, Truck, Store, Clock } from "lucide-react";
+import { ChevronRight } from "lucide-react";
 import { woocommerce } from "@/lib/woocommerce";
 import { formatPrice, stripHtml, sanitizeHtml } from "@/lib/utils";
 import { ProductGallery } from "@/components/shop/ProductGallery";
-import { AddToCart, LocationStock } from "@/components/shop";
+import { AddToCart, FulfillmentSelector } from "@/components/shop";
 import { Badge } from "@/components/ui";
 
 interface ProductPageProps {
@@ -114,37 +114,15 @@ export default async function ProductPage({ params }: ProductPageProps) {
             )}
           </div>
 
-          {/* Stock at selected location */}
-          <LocationStock stockQuantity={product.stock_quantity} />
+          {/* Fulfillment Selection */}
+          <FulfillmentSelector
+            sku={product.sku}
+            yakimaStock={product.stock_quantity ?? 0}
+          />
 
           {/* Add to cart */}
           <div className="pt-4 border-t border-neutral-200">
             <AddToCart product={product} />
-          </div>
-
-          {/* Fulfillment options */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-4">
-            <div className="flex items-start gap-3 text-sm">
-              <Store className="h-5 w-5 text-primary flex-shrink-0" />
-              <div>
-                <p className="font-medium text-neutral-900">Local Pickup</p>
-                <p className="text-neutral-500">Yakima or Toppenish</p>
-              </div>
-            </div>
-            <div className="flex items-start gap-3 text-sm">
-              <Truck className="h-5 w-5 text-primary flex-shrink-0" />
-              <div>
-                <p className="font-medium text-neutral-900">Local Delivery</p>
-                <p className="text-neutral-500">Yakima Valley area</p>
-              </div>
-            </div>
-            <div className="flex items-start gap-3 text-sm">
-              <Clock className="h-5 w-5 text-primary flex-shrink-0" />
-              <div>
-                <p className="font-medium text-neutral-900">Store Hours</p>
-                <p className="text-neutral-500">Mon-Fri 8-5:30</p>
-              </div>
-            </div>
           </div>
 
           {/* Short description */}

@@ -114,8 +114,8 @@ export function StoreSelector() {
                     <p className="text-xs text-neutral-500 mt-0.5">
                       {LOCATIONS.TOPPENISH.address}
                     </p>
-                    <p className="text-xs text-amber-600 mt-1 font-medium">
-                      Call for availability
+                    <p className="text-xs text-green-600 mt-1 font-medium">
+                      Inventory available
                     </p>
                   </div>
                 </div>

@@ -1,18 +1,32 @@
 "use client";
 
 import { MapPin, Phone } from "lucide-react";
-import { useLocationStore, getStockForLocation } from "@/stores/locationStore";
+import { useLocationStore } from "@/stores/locationStore";
+import { useInventoryStore } from "@/stores/inventoryStore";
+import { useEffect } from "react";
 
 interface LocationStockProps {
   stockQuantity: number | null;
+  sku?: string;
 }
 
-export function LocationStock({ stockQuantity }: LocationStockProps) {
+export function LocationStock({ stockQuantity, sku }: LocationStockProps) {
   const selectedLocationId = useLocationStore((state) => state.selectedLocationId);
   const locationName = useLocationStore((state) => state.getLocationName());
   const locationInfo = useLocationStore((state) => state.getLocationInfo());
 
-  const stockForLocation = getStockForLocation(stockQuantity, selectedLocationId);
+  const { fetchToppenishInventory, getToppenishStock } = useInventoryStore();
+
+  useEffect(() => {
+    if (sku) {
+      fetchToppenishInventory([sku]);
+    }
+  }, [sku, fetchToppenishInventory]);
+
+  // Get stock based on selected location
+  const yakimaStock = stockQuantity ?? 0;
+  const toppenishStock = sku ? getToppenishStock(sku) : 0;
+  const stockForLocation = selectedLocationId === 1 ? yakimaStock : toppenishStock;
 
   const getStockColor = (quantity: number) => {
     if (quantity === 0) return "text-red-600";
@@ -41,12 +55,12 @@ export function LocationStock({ stockQuantity }: LocationStockProps) {
           </span>
         </div>
 
-        {/* Toppenish notice */}
-        {selectedLocationId === 2 && (
+        {/* Toppenish contact info - only show if no SKU (can't look up stock) */}
+        {selectedLocationId === 2 && !sku && (
           <div className="pt-3 border-t border-amber-200">
             <p className="text-sm text-amber-700 flex items-center gap-2">
               <Phone className="h-4 w-4" />
-              Inventory for Toppenish is not yet synced online. Please call for current availability.
+              Call to confirm availability at Toppenish.
             </p>
             <a
               href="tel:+15098658544"
@@ -58,7 +72,7 @@ export function LocationStock({ stockQuantity }: LocationStockProps) {
         )}
 
         {/* Low stock warning */}
-        {selectedLocationId === 1 && stockForLocation > 0 && stockForLocation <= 5 && (
+        {stockForLocation > 0 && stockForLocation <= 5 && (
           <p className="text-sm text-amber-700">
             Low stock - order soon!
           </p>

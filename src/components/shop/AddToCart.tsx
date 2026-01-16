@@ -1,11 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { ShoppingCart, Plus, Minus, Check } from "lucide-react";
 import { Product } from "@/types";
 import { Button } from "@/components/ui";
 import { useCartStore } from "@/stores/cartStore";
-import { useLocationStore, getStockForLocation } from "@/stores/locationStore";
+import { useInventoryStore } from "@/stores/inventoryStore";
+import { useLocationStore } from "@/stores/locationStore";
 
 interface AddToCartProps {
   product: Product;
@@ -17,16 +18,44 @@ export function AddToCart({ product, showQuantity = true }: AddToCartProps) {
   const [added, setAdded] = useState(false);
   const addItem = useCartStore((state) => state.addItem);
   const cartItem = useCartStore((state) => state.getItem(product.id));
-  const selectedLocationId = useLocationStore((state) => state.selectedLocationId);
 
-  // Get stock for selected location
-  const stockForLocation = getStockForLocation(product.stock_quantity, selectedLocationId);
-  const isInStock = stockForLocation > 0;
-  const maxQuantity = stockForLocation || 99;
+  const { fetchToppenishInventory, getToppenishStock } = useInventoryStore();
+
+  // Fetch Toppenish inventory
+  useEffect(() => {
+    if (product.sku) {
+      fetchToppenishInventory([product.sku]);
+    }
+  }, [product.sku, fetchToppenishInventory]);
+
+  // Check stock across both locations
+  const yakimaStock = product.stock_quantity ?? 0;
+  const toppenishStock = product.sku ? getToppenishStock(product.sku) : 0;
+  const totalStock = yakimaStock + toppenishStock;
+  const isInStock = totalStock > 0;
+  const maxQuantity = totalStock || 99;
+
+  const selectedLocationId = useLocationStore((state) => state.selectedLocationId);
+  const selectedStore = selectedLocationId === 1 ? "yakima" : "toppenish";
+  const cartFulfillment = useCartStore((state) => state.fulfillment);
 
   const handleAddToCart = () => {
     if (isInStock) {
-      addItem(product, quantity);
+      // Default to free local pickup at customer's selected store
+      let fulfillmentToAdd = {
+        method: "pickup" as const,
+        pickupLocation: selectedStore,
+      };
+
+      // If they explicitly selected a different fulfillment method on the product page, use that
+      if (cartFulfillment) {
+        fulfillmentToAdd = {
+          method: cartFulfillment.method,
+          pickupLocation: cartFulfillment.pickupLocation as "yakima" | "toppenish" | undefined,
+        };
+      }
+
+      addItem(product, quantity, fulfillmentToAdd);
       setAdded(true);
       setTimeout(() => setAdded(false), 2000);
     }
@@ -44,19 +73,15 @@ export function AddToCart({ product, showQuantity = true }: AddToCartProps) {
     }
   };
 
-  const locationName = useLocationStore((state) => state.getLocationName());
-
   if (!isInStock) {
     return (
       <div className="space-y-2">
         <Button disabled variant="outline" className="w-full">
-          Out of Stock at {locationName}
+          Out of Stock
         </Button>
-        {selectedLocationId === 2 && (
-          <p className="text-sm text-center text-amber-600">
-            Call (509) 865-8544 for Toppenish availability
-          </p>
-        )}
+        <p className="text-sm text-center text-neutral-500">
+          This item is currently unavailable at all locations
+        </p>
       </div>
     );
   }

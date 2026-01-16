@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Product } from "@/types";
 import { ViewToggle } from "./ViewToggle";
 import {
@@ -11,6 +11,8 @@ import {
   ProductViewType,
 } from "./ProductCardVariants";
 import { cn } from "@/lib/utils";
+import { useLocationStore } from "@/stores/locationStore";
+import { useInventoryStore } from "@/stores/inventoryStore";
 
 interface ProductGridWithToggleProps {
   products: Product[];
@@ -35,6 +37,51 @@ const CardComponents: Record<ProductViewType, React.ComponentType<{ product: Pro
 
 export function ProductGridWithToggle({ products, loading }: ProductGridWithToggleProps) {
   const [viewType, setViewType] = useState<ProductViewType>("detailed");
+  const selectedLocationId = useLocationStore((state) => state.selectedLocationId);
+  const { fetchToppenishInventory, toppenishInventory } = useInventoryStore();
+
+  // Fetch all product SKUs for Toppenish inventory on mount
+  useEffect(() => {
+    const skus = products.map((p) => p.sku).filter(Boolean);
+    if (skus.length > 0) {
+      fetchToppenishInventory(skus);
+    }
+  }, [products, fetchToppenishInventory]);
+
+  const { getToppenishStock } = useInventoryStore();
+
+  // Filter and sort products
+  const sortedProducts = useMemo(() => {
+    // Filter out products that are out of stock in both locations
+    const filteredProducts = products.filter((product) => {
+      const yakimaStock = product.stock_quantity ?? 0;
+      const toppenishStock = product.sku ? getToppenishStock(product.sku) : 0;
+      return yakimaStock > 0 || toppenishStock > 0;
+    });
+
+    // Sort by stock at selected location first
+    return [...filteredProducts].sort((a, b) => {
+      const aYakimaStock = a.stock_quantity ?? 0;
+      const bYakimaStock = b.stock_quantity ?? 0;
+      const aToppenishStock = a.sku ? getToppenishStock(a.sku) : 0;
+      const bToppenishStock = b.sku ? getToppenishStock(b.sku) : 0;
+
+      if (selectedLocationId === 1) {
+        // Yakima selected: show Yakima in-stock first
+        const aInStock = aYakimaStock > 0;
+        const bInStock = bYakimaStock > 0;
+        if (aInStock && !bInStock) return -1;
+        if (!aInStock && bInStock) return 1;
+      } else {
+        // Toppenish selected: show Toppenish in-stock first
+        const aInStock = aToppenishStock > 0;
+        const bInStock = bToppenishStock > 0;
+        if (aInStock && !bInStock) return -1;
+        if (!aInStock && bInStock) return 1;
+      }
+      return 0;
+    });
+  }, [products, selectedLocationId, getToppenishStock, toppenishInventory]);
 
   if (loading) {
     return (
@@ -51,7 +98,7 @@ export function ProductGridWithToggle({ products, loading }: ProductGridWithTogg
     );
   }
 
-  if (products.length === 0) {
+  if (sortedProducts.length === 0) {
     return (
       <div className="text-center py-16">
         <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-neutral-100 flex items-center justify-center">
@@ -59,9 +106,9 @@ export function ProductGridWithToggle({ products, loading }: ProductGridWithTogg
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
           </svg>
         </div>
-        <h3 className="text-lg font-medium text-neutral-900 mb-1">No products found</h3>
+        <h3 className="text-lg font-medium text-neutral-900 mb-1">No products in stock</h3>
         <p className="text-neutral-500">
-          Try adjusting your search or filters
+          All products are currently out of stock
         </p>
       </div>
     );
@@ -74,14 +121,14 @@ export function ProductGridWithToggle({ products, loading }: ProductGridWithTogg
       {/* Header with view toggle */}
       <div className="flex items-center justify-between mb-6">
         <p className="text-sm text-neutral-500">
-          {products.length} product{products.length !== 1 ? "s" : ""}
+          {sortedProducts.length} product{sortedProducts.length !== 1 ? "s" : ""} in stock
         </p>
         <ViewToggle currentView={viewType} onViewChange={setViewType} />
       </div>
 
       {/* Products grid */}
       <div className={cn(gridClasses[viewType], "transition-all duration-300")}>
-        {products.map((product) => (
+        {sortedProducts.map((product) => (
           <CardComponent key={product.id} product={product} />
         ))}
       </div>

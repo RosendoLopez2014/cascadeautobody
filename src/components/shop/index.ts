@@ -6,6 +6,8 @@ export { InventoryBadge, StockIndicator } from "./InventoryBadge";
 export { LocationStock } from "./LocationStock";
 export { CategoryFilter, CategoryFilterMobile } from "./CategoryFilter";
 export { AddToCart } from "./AddToCart";
+export { FulfillmentSelector } from "./FulfillmentSelector";
+export { FulfillmentModal } from "./FulfillmentModal";
 export {
   ProductCardCompact,
   ProductCardDetailed,

@@ -3,7 +3,11 @@ import { Product } from "./product";
 export interface CartItem {
   product: Product;
   quantity: number;
-  selectedLocation?: string; // Yakima or Toppenish
+  fulfillment?: {
+    method: FulfillmentMethod;
+    pickupLocation?: "yakima" | "toppenish";
+  };
+  shippingCost?: number;
 }
 
 export interface Cart {

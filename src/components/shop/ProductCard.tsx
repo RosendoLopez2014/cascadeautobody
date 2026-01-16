@@ -3,11 +3,13 @@
 import Link from "next/link";
 import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
-import { ShoppingCart, Check, Eye, CheckCircle, XCircle } from "lucide-react";
+import { ShoppingCart, Check, Eye, CheckCircle, XCircle, Truck, Package } from "lucide-react";
 import { Product } from "@/types";
 import { formatPrice } from "@/lib/utils";
 import { useCartStore } from "@/stores/cartStore";
-import { useState } from "react";
+import { useInventoryStore } from "@/stores/inventoryStore";
+import { useLocationStore } from "@/stores/locationStore";
+import { useState, useEffect } from "react";
 
 interface ProductCardProps {
   product: Product;
@@ -18,13 +20,23 @@ export function ProductCard({ product, index = 0 }: ProductCardProps) {
   const addItem = useCartStore((state) => state.addItem);
   const cartItem = useCartStore((state) => state.getItem(product.id));
   const [justAdded, setJustAdded] = useState(false);
+  const selectedLocationId = useLocationStore((state) => state.selectedLocationId);
+
+  // Fetch Toppenish inventory
+  const { fetchToppenishInventory, getToppenishStock } = useInventoryStore();
+
+  useEffect(() => {
+    if (product.sku) {
+      fetchToppenishInventory([product.sku]);
+    }
+  }, [product.sku, fetchToppenishInventory]);
 
   const mainImage = product.images[0];
 
   // Stock for both locations
-  // Yakima = actual WooCommerce stock, Toppenish = 0 for now (will be updated when MicroBiz sync is complete)
+  // Yakima = actual WooCommerce stock, Toppenish = from Supabase
   const yakimaStock = product.stock_quantity ?? 0;
-  const toppenishStock = 0; // Placeholder until MicroBiz integration
+  const toppenishStock = product.sku ? getToppenishStock(product.sku) : 0;
   const totalStock = yakimaStock + toppenishStock;
   const isInStock = totalStock > 0;
 
@@ -160,26 +172,49 @@ export function ProductCard({ product, index = 0 }: ProductCardProps) {
               )}
             </div>
 
-            {/* Both Locations Stock Display */}
-            <div className="flex items-center gap-4 text-sm text-neutral-600">
-              <div className="flex items-center gap-1.5">
-                <span className="font-medium">Yakima:</span>
-                <span className={`font-semibold ${
-                  yakimaStock > 5 ? "text-green-600" :
-                  yakimaStock > 0 ? "text-amber-600" : "text-red-500"
-                }`}>
-                  {yakimaStock}
-                </span>
+            {/* Fulfillment Options */}
+            <div className="space-y-2 text-sm">
+              {/* Pickup */}
+              <div className="flex items-start gap-2">
+                <CheckCircle className="h-4 w-4 text-green-600 mt-0.5 flex-shrink-0" />
+                <div>
+                  <span className="font-medium text-neutral-900">Pickup today</span>
+                  <div className="flex items-center gap-2 text-xs text-neutral-500 mt-0.5">
+                    {selectedLocationId === 1 ? (
+                      <>
+                        <span className={`font-medium ${yakimaStock > 0 ? "text-green-600" : "text-neutral-400"}`}>
+                          Yakima
+                        </span>
+                        <span className="text-neutral-300">|</span>
+                        <span className={`font-medium ${toppenishStock > 0 ? "text-green-600" : "text-neutral-400"}`}>
+                          Toppenish
+                        </span>
+                      </>
+                    ) : (
+                      <>
+                        <span className={`font-medium ${toppenishStock > 0 ? "text-green-600" : "text-neutral-400"}`}>
+                          Toppenish
+                        </span>
+                        <span className="text-neutral-300">|</span>
+                        <span className={`font-medium ${yakimaStock > 0 ? "text-green-600" : "text-neutral-400"}`}>
+                          Yakima
+                        </span>
+                      </>
+                    )}
+                  </div>
+                </div>
               </div>
-              <span className="text-neutral-300">|</span>
-              <div className="flex items-center gap-1.5">
-                <span className="font-medium">Toppenish:</span>
-                <span className={`font-semibold ${
-                  toppenishStock > 5 ? "text-green-600" :
-                  toppenishStock > 0 ? "text-amber-600" : "text-red-500"
-                }`}>
-                  {toppenishStock}
-                </span>
+
+              {/* Local Delivery */}
+              <div className="flex items-center gap-2">
+                <Truck className="h-4 w-4 text-green-600 flex-shrink-0" />
+                <span className="font-medium text-neutral-900">Local delivery</span>
+              </div>
+
+              {/* Shipping */}
+              <div className="flex items-center gap-2">
+                <Package className="h-4 w-4 text-green-600 flex-shrink-0" />
+                <span className="font-medium text-neutral-900">Ships nationwide</span>
               </div>
             </div>
 

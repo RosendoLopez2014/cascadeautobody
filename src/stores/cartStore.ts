@@ -1,15 +1,17 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import { Product, CartItem, FulfillmentDetails } from "@/types";
+import { Product, CartItem, FulfillmentDetails, FulfillmentMethod } from "@/types";
 
 interface CartState {
   items: CartItem[];
   fulfillment: FulfillmentDetails | null;
 
   // Actions
-  addItem: (product: Product, quantity?: number) => void;
+  addItem: (product: Product, quantity?: number, fulfillment?: { method: FulfillmentMethod; pickupLocation?: "yakima" | "toppenish" }) => void;
   removeItem: (productId: number) => void;
   updateQuantity: (productId: number, quantity: number) => void;
+  updateItemFulfillment: (productId: number, fulfillment: { method: FulfillmentMethod; pickupLocation?: "yakima" | "toppenish" }) => void;
+  updateItemShippingCost: (productId: number, shippingCost: number) => void;
   clearCart: () => void;
   setFulfillment: (fulfillment: FulfillmentDetails) => void;
 
@@ -25,7 +27,7 @@ export const useCartStore = create<CartState>()(
       items: [],
       fulfillment: null,
 
-      addItem: (product: Product, quantity = 1) => {
+      addItem: (product: Product, quantity = 1, fulfillment) => {
         set((state) => {
           const existingItem = state.items.find(
             (item) => item.product.id === product.id
@@ -35,14 +37,18 @@ export const useCartStore = create<CartState>()(
             return {
               items: state.items.map((item) =>
                 item.product.id === product.id
-                  ? { ...item, quantity: item.quantity + quantity }
+                  ? {
+                      ...item,
+                      quantity: item.quantity + quantity,
+                      fulfillment: fulfillment || item.fulfillment
+                    }
                   : item
               ),
             };
           }
 
           return {
-            items: [...state.items, { product, quantity }],
+            items: [...state.items, { product, quantity, fulfillment }],
           };
         });
       },
@@ -62,6 +68,22 @@ export const useCartStore = create<CartState>()(
         set((state) => ({
           items: state.items.map((item) =>
             item.product.id === productId ? { ...item, quantity } : item
+          ),
+        }));
+      },
+
+      updateItemFulfillment: (productId: number, fulfillment: { method: FulfillmentMethod; pickupLocation?: "yakima" | "toppenish" }) => {
+        set((state) => ({
+          items: state.items.map((item) =>
+            item.product.id === productId ? { ...item, fulfillment } : item
+          ),
+        }));
+      },
+
+      updateItemShippingCost: (productId: number, shippingCost: number) => {
+        set((state) => ({
+          items: state.items.map((item) =>
+            item.product.id === productId ? { ...item, shippingCost } : item
           ),
         }));
       },
