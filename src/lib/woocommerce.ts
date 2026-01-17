@@ -17,6 +17,14 @@ export const LOCATIONS = {
   TOPPENISH: { id: 2, name: "Toppenish", address: "216 S Beech St, Toppenish, WA 98948" },
 } as const;
 
+interface ToppenishInventoryItem {
+  sku: string;
+  product_name: string;
+  total_stock: number;
+  open_stock: number;
+  price: number;
+}
+
 class WooCommerceClient {
   private baseUrl: string;
   private consumerKey: string;
@@ -40,21 +48,30 @@ class WooCommerceClient {
   ): Promise<T> {
     const url = this.addAuthParams(`${this.baseUrl}${endpoint}`);
 
-    const response = await fetch(url, {
-      ...options,
-      cache: 'no-store', // Disable Next.js fetch caching
-      headers: {
-        "Content-Type": "application/json",
-        ...options.headers,
-      },
-    });
+    try {
+      const response = await fetch(url, {
+        ...options,
+        cache: 'no-store', // Disable Next.js fetch caching
+        headers: {
+          "Content-Type": "application/json",
+          ...options.headers,
+        },
+      });
 
-    if (!response.ok) {
-      const error = await response.text();
-      throw new Error(`WooCommerce API error: ${response.status} - ${error}`);
+      if (!response.ok) {
+        const error = await response.text();
+        throw new Error(`WooCommerce API error: ${response.status} - ${error}`);
+      }
+
+      return response.json();
+    } catch (error) {
+      console.error('[WooCommerce] Fetch error:', {
+        endpoint,
+        url: this.baseUrl + endpoint,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
     }
-
-    return response.json();
   }
 
   // Products
@@ -82,19 +99,37 @@ class WooCommerceClient {
 
     const queryString = searchParams.toString();
     const url = this.addAuthParams(`${this.baseUrl}/products?${queryString}`);
-    const response = await fetch(url, { cache: 'no-store' });
+
+    let response;
+    try {
+      response = await fetch(url, {
+        cache: 'no-store',
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
+    } catch (error) {
+      console.error('[WooCommerce] Failed to fetch products:', error);
+      throw new Error(`Failed to connect to WooCommerce: ${error instanceof Error ? error.message : String(error)}`);
+    }
 
     if (!response.ok) {
-      throw new Error(`Failed to fetch products: ${response.status}`);
+      const errorText = await response.text();
+      throw new Error(`Failed to fetch products: ${response.status} - ${errorText}`);
     }
 
     const products: Product[] = await response.json();
     const total = parseInt(response.headers.get("X-WP-Total") || "0");
     const totalPages = parseInt(response.headers.get("X-WP-TotalPages") || "0");
 
+    console.log('[WooCommerce] Fetched', products.length, 'products from WooCommerce');
+
+    // Fetch Toppenish inventory from Supabase
+    const toppenishInventory = await this.fetchToppenishInventory();
+
     // Transform products to include multi-location inventory
     const productsWithInventory = products.map((product) =>
-      this.addLocationInventory(product)
+      this.addLocationInventory(product, toppenishInventory)
     );
 
     return {
@@ -110,46 +145,125 @@ class WooCommerceClient {
         ? `/products/${idOrSlug}`
         : `/products?slug=${idOrSlug}`;
 
+    // Fetch Toppenish inventory from Supabase
+    const toppenishInventory = await this.fetchToppenishInventory();
+
     if (typeof idOrSlug === "string") {
       const products = await this.request<Product[]>(endpoint);
       if (products.length === 0) {
         throw new Error(`Product not found: ${idOrSlug}`);
       }
-      return this.addLocationInventory(products[0]);
+      return this.addLocationInventory(products[0], toppenishInventory);
     }
 
     const product = await this.request<Product>(endpoint);
-    return this.addLocationInventory(product);
+    return this.addLocationInventory(product, toppenishInventory);
   }
 
-  // Add location inventory from meta data
-  private addLocationInventory(product: Product): Product {
-    // Check for location inventory in meta data
-    // This assumes MicroBiz sync adds meta fields like _yakima_stock, _toppenish_stock
-    const yakimaStock = product.meta_data?.find(
-      (m) => m.key === "_yakima_stock" || m.key === "_location_1_stock"
-    );
-    const toppenishStock = product.meta_data?.find(
-      (m) => m.key === "_toppenish_stock" || m.key === "_location_2_stock"
-    );
+  // Fetch Toppenish inventory directly from Supabase
+  private async fetchToppenishInventory(): Promise<Record<string, ToppenishInventoryItem>> {
+    try {
+      console.log('[WooCommerce] Fetching Toppenish inventory at:', new Date().toISOString());
 
-    // If no location data, split total stock evenly (fallback)
+      // Lazy import supabase to avoid module initialization issues
+      const { createClient } = await import("@supabase/supabase-js");
+
+      const supabaseUrl = process.env.SUPABASE_URL;
+      const supabaseKey = process.env.SUPABASE_SERVICE_KEY;
+
+      if (!supabaseUrl || !supabaseKey) {
+        console.warn('[WooCommerce] Supabase credentials not configured, skipping Toppenish inventory fetch');
+        return {};
+      }
+
+      const supabase = createClient(supabaseUrl, supabaseKey);
+
+      const { data, error } = await supabase
+        .from("inventory")
+        .select("sku, product_name, total_stock, open_stock, price");
+
+      if (error) {
+        console.error("Error fetching Toppenish inventory from Supabase:", error);
+        return {};
+      }
+
+      // Normalize SKUs to lowercase and trim whitespace for better matching
+      const normalizedInventory: Record<string, ToppenishInventoryItem> = {};
+      if (data) {
+        for (const item of data) {
+          const normalizedSku = item.sku.trim().toLowerCase();
+          normalizedInventory[normalizedSku] = item;
+        }
+      }
+
+      console.log('[WooCommerce] ✓ Fetched fresh Toppenish inventory:', Object.keys(normalizedInventory).length, 'items');
+      console.log('[WooCommerce] Sample data:', data?.slice(0, 3).map(i => ({ sku: i.sku, open: i.open_stock, total: i.total_stock })));
+      return normalizedInventory;
+    } catch (error) {
+      console.error("Error fetching Toppenish inventory:", error);
+      return {};
+    }
+  }
+
+  // Calculate location inventory using Supabase data for Toppenish
+  // Logic: WooCommerce has combined inventory (Yakima + Toppenish)
+  // Supabase has Toppenish inventory, so Yakima = WooCommerce - Toppenish
+  private addLocationInventory(
+    product: Product,
+    toppenishInventory: Record<string, ToppenishInventoryItem>
+  ): Product {
     const totalStock = product.stock_quantity || 0;
+    const productSku = (product.sku || "").trim();
+
+    let toppenishStock = 0;
+    let yakimaStock = 0;
+
+    // Normalize SKU for matching (lowercase, trim whitespace)
+    const normalizedSku = productSku.toLowerCase();
+
+    // Check if this product exists in Toppenish Supabase inventory
+    const toppenishItem = normalizedSku ? toppenishInventory[normalizedSku] : undefined;
+
+    if (toppenishItem) {
+      // Product exists in Toppenish - use open_stock from Supabase
+      toppenishStock = toppenishItem.open_stock || 0;
+      // Calculate Yakima stock by subtracting Toppenish from total
+      yakimaStock = Math.max(0, totalStock - toppenishStock);
+
+      console.log(`[Inventory Split] ${product.name} (SKU: ${productSku}):`, {
+        normalizedSku,
+        wooCommerceTotal: totalStock,
+        supabaseOpenStock: toppenishItem.open_stock,
+        supabaseTotalStock: toppenishItem.total_stock,
+        calculated_toppenish: toppenishStock,
+        calculated_yakima: yakimaStock,
+      });
+    } else if (totalStock > 0 && productSku) {
+      // SKU exists only in WooCommerce, not in Supabase
+      // This means the product is only available in Yakima
+      yakimaStock = totalStock;
+      toppenishStock = 0;
+
+      console.log(`[Inventory Split] ${product.name} (SKU: ${productSku}): Yakima-only`, {
+        wooCommerceTotal: totalStock,
+        yakima: yakimaStock,
+      });
+    } else {
+      // No SKU or no stock - both locations show 0
+      yakimaStock = 0;
+      toppenishStock = 0;
+    }
 
     product.inventory_by_location = [
       {
         location_id: LOCATIONS.YAKIMA.id,
         location_name: LOCATIONS.YAKIMA.name,
-        stock_quantity: yakimaStock
-          ? parseInt(yakimaStock.value)
-          : Math.ceil(totalStock / 2),
+        stock_quantity: yakimaStock,
       },
       {
         location_id: LOCATIONS.TOPPENISH.id,
         location_name: LOCATIONS.TOPPENISH.name,
-        stock_quantity: toppenishStock
-          ? parseInt(toppenishStock.value)
-          : Math.floor(totalStock / 2),
+        stock_quantity: toppenishStock,
       },
     ];
 

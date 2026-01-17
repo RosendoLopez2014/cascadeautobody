@@ -2,12 +2,18 @@
 
 import { Suspense } from "react";
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import { motion, AnimatePresence } from "framer-motion";
 import { Package, ChevronRight, Grid3X3 } from "lucide-react";
-import { ProductGridWithToggle } from "@/components/shop";
 import { LoadingScreen } from "@/components/ui";
 import { FadeIn } from "@/components/motion";
 import { Category, Product } from "@/types";
+
+// Import ProductGridWithToggle without SSR to avoid hydration issues
+const ProductGridWithToggle = dynamic(
+  () => import("@/components/shop").then((mod) => ({ default: mod.ProductGridWithToggle })),
+  { ssr: false, loading: () => <LoadingScreen /> }
+);
 
 interface ShopPageClientProps {
   data: {
@@ -28,6 +34,18 @@ interface ShopPageClientProps {
 }
 
 export function ShopPageClient({ data, searchParams }: ShopPageClientProps) {
+  // Log inventory data to verify fresh data on each render
+  if (typeof window !== 'undefined') {
+    console.log('[ShopPageClient] Rendered at:', new Date().toISOString());
+    console.log('[ShopPageClient] Products with inventory:',
+      data.products.map(p => ({
+        name: p.name,
+        sku: p.sku,
+        inventory: p.inventory_by_location
+      }))
+    );
+  }
+
   return (
     <div className="min-h-screen bg-neutral-50">
       {/* Header */}

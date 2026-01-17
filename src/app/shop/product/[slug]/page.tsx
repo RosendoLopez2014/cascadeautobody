@@ -12,6 +12,10 @@ interface ProductPageProps {
   params: { slug: string };
 }
 
+// Disable caching to ensure fresh inventory data
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 export async function generateMetadata({
   params,
 }: ProductPageProps): Promise<Metadata> {
@@ -38,6 +42,12 @@ export default async function ProductPage({ params }: ProductPageProps) {
 
   try {
     product = await woocommerce.getProduct(params.slug);
+
+    // Debug logging to verify fresh inventory calculations
+    console.log('[Product Page] Fresh fetch at:', new Date().toISOString());
+    console.log('[Product Page] Product:', product.name, 'SKU:', product.sku);
+    console.log('[Product Page] WooCommerce Total Stock:', product.stock_quantity);
+    console.log('[Product Page] Calculated Inventory:', product.inventory_by_location);
   } catch {
     notFound();
   }
@@ -117,7 +127,8 @@ export default async function ProductPage({ params }: ProductPageProps) {
           {/* Fulfillment Selection */}
           <FulfillmentSelector
             sku={product.sku}
-            yakimaStock={product.stock_quantity ?? 0}
+            yakimaStock={product.inventory_by_location?.find(loc => loc.location_id === 1)?.stock_quantity ?? 0}
+            toppenishStock={product.inventory_by_location?.find(loc => loc.location_id === 2)?.stock_quantity ?? 0}
           />
 
           {/* Add to cart */}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useMemo } from "react";
 import { Product } from "@/types";
 import { ViewToggle } from "./ViewToggle";
 import {
@@ -11,8 +11,7 @@ import {
   ProductViewType,
 } from "./ProductCardVariants";
 import { cn } from "@/lib/utils";
-import { useLocationStore } from "@/stores/locationStore";
-import { useInventoryStore } from "@/stores/inventoryStore";
+import { useSafeLocationId } from "@/hooks/useSafeLocation";
 
 interface ProductGridWithToggleProps {
   products: Product[];
@@ -37,51 +36,64 @@ const CardComponents: Record<ProductViewType, React.ComponentType<{ product: Pro
 
 export function ProductGridWithToggle({ products, loading }: ProductGridWithToggleProps) {
   const [viewType, setViewType] = useState<ProductViewType>("detailed");
-  const selectedLocationId = useLocationStore((state) => state.selectedLocationId);
-  const { fetchToppenishInventory, toppenishInventory } = useInventoryStore();
+  const { locationId: selectedLocationId, mounted } = useSafeLocationId();
 
-  // Fetch all product SKUs for Toppenish inventory on mount
-  useEffect(() => {
-    const skus = products.map((p) => p.sku).filter(Boolean);
-    if (skus.length > 0) {
-      fetchToppenishInventory(skus);
-    }
-  }, [products, fetchToppenishInventory]);
-
-  const { getToppenishStock } = useInventoryStore();
-
-  // Filter and sort products
-  const sortedProducts = useMemo(() => {
-    // Filter out products that are out of stock in both locations
-    const filteredProducts = products.filter((product) => {
-      const yakimaStock = product.stock_quantity ?? 0;
-      const toppenishStock = product.sku ? getToppenishStock(product.sku) : 0;
-      return yakimaStock > 0 || toppenishStock > 0;
+  // Categorize and sort products
+  const categorizedProducts = useMemo(() => {
+    // Get stock for each product
+    const productsWithStock = products.map((product) => {
+      const yakimaStock = product.inventory_by_location?.find(loc => loc.location_id === 1)?.stock_quantity ?? 0;
+      const toppenishStock = product.inventory_by_location?.find(loc => loc.location_id === 2)?.stock_quantity ?? 0;
+      return { product, yakimaStock, toppenishStock };
     });
 
-    // Sort by stock at selected location first
-    return [...filteredProducts].sort((a, b) => {
-      const aYakimaStock = a.stock_quantity ?? 0;
-      const bYakimaStock = b.stock_quantity ?? 0;
-      const aToppenishStock = a.sku ? getToppenishStock(a.sku) : 0;
-      const bToppenishStock = b.sku ? getToppenishStock(b.sku) : 0;
+    // Separate in-stock and out-of-stock products
+    const inStockProducts = productsWithStock.filter(
+      ({ yakimaStock, toppenishStock }) => yakimaStock > 0 || toppenishStock > 0
+    );
+
+    const outOfStockProducts = productsWithStock.filter(
+      ({ yakimaStock, toppenishStock }) => yakimaStock === 0 && toppenishStock === 0
+    );
+
+    // Categorize in-stock products based on selected location
+    const onlySelected: typeof inStockProducts = [];
+    const inBoth: typeof inStockProducts = [];
+    const onlyOther: typeof inStockProducts = [];
+
+    inStockProducts.forEach((item) => {
+      const { yakimaStock, toppenishStock } = item;
 
       if (selectedLocationId === 1) {
-        // Yakima selected: show Yakima in-stock first
-        const aInStock = aYakimaStock > 0;
-        const bInStock = bYakimaStock > 0;
-        if (aInStock && !bInStock) return -1;
-        if (!aInStock && bInStock) return 1;
+        // Yakima selected
+        if (yakimaStock > 0 && toppenishStock === 0) {
+          onlySelected.push(item);
+        } else if (yakimaStock > 0 && toppenishStock > 0) {
+          inBoth.push(item);
+        } else if (yakimaStock === 0 && toppenishStock > 0) {
+          onlyOther.push(item);
+        }
       } else {
-        // Toppenish selected: show Toppenish in-stock first
-        const aInStock = aToppenishStock > 0;
-        const bInStock = bToppenishStock > 0;
-        if (aInStock && !bInStock) return -1;
-        if (!aInStock && bInStock) return 1;
+        // Toppenish selected
+        if (toppenishStock > 0 && yakimaStock === 0) {
+          onlySelected.push(item);
+        } else if (toppenishStock > 0 && yakimaStock > 0) {
+          inBoth.push(item);
+        } else if (toppenishStock === 0 && yakimaStock > 0) {
+          onlyOther.push(item);
+        }
       }
-      return 0;
     });
-  }, [products, selectedLocationId, getToppenishStock, toppenishInventory]);
+
+    return {
+      onlySelected: onlySelected.map(({ product }) => product),
+      inBoth: inBoth.map(({ product }) => product),
+      onlyOther: onlyOther.map(({ product }) => product),
+      outOfStock: outOfStockProducts.map(({ product }) => product),
+      totalCount: inStockProducts.length,
+      totalProducts: products.length,
+    };
+  }, [products, selectedLocationId]);
 
   if (loading) {
     return (
@@ -98,7 +110,7 @@ export function ProductGridWithToggle({ products, loading }: ProductGridWithTogg
     );
   }
 
-  if (sortedProducts.length === 0) {
+  if (categorizedProducts.totalProducts === 0) {
     return (
       <div className="text-center py-16">
         <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-neutral-100 flex items-center justify-center">
@@ -106,32 +118,99 @@ export function ProductGridWithToggle({ products, loading }: ProductGridWithTogg
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
           </svg>
         </div>
-        <h3 className="text-lg font-medium text-neutral-900 mb-1">No products in stock</h3>
+        <h3 className="text-lg font-medium text-neutral-900 mb-1">No products found</h3>
         <p className="text-neutral-500">
-          All products are currently out of stock
+          No products available
         </p>
       </div>
     );
   }
 
   const CardComponent = CardComponents[viewType];
+  const { onlySelected, inBoth, onlyOther, outOfStock, totalCount } = categorizedProducts;
+  const otherLocationName = selectedLocationId === 1 ? "Toppenish" : "Yakima";
+
+  // Don't render sorted/categorized view until mounted to prevent hydration issues
+  if (!mounted) {
+    const allProducts = [...onlySelected, ...inBoth, ...onlyOther, ...outOfStock];
+    return (
+      <div>
+        <div className="flex items-center justify-between mb-6">
+          <p className="text-sm text-neutral-500">
+            {totalCount} product{totalCount !== 1 ? "s" : ""} in stock
+          </p>
+          <ViewToggle currentView={viewType} onViewChange={setViewType} />
+        </div>
+        <div className={cn(gridClasses[viewType], "transition-all duration-300")}>
+          {allProducts.map((product) => (
+            <CardComponent key={product.id} product={product} />
+          ))}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div>
       {/* Header with view toggle */}
       <div className="flex items-center justify-between mb-6">
         <p className="text-sm text-neutral-500">
-          {sortedProducts.length} product{sortedProducts.length !== 1 ? "s" : ""} in stock
+          {totalCount} product{totalCount !== 1 ? "s" : ""} in stock
         </p>
         <ViewToggle currentView={viewType} onViewChange={setViewType} />
       </div>
 
-      {/* Products grid */}
-      <div className={cn(gridClasses[viewType], "transition-all duration-300")}>
-        {sortedProducts.map((product) => (
-          <CardComponent key={product.id} product={product} />
-        ))}
-      </div>
+      {/* Products at selected location and both locations - combined for continuous grid */}
+      {(onlySelected.length > 0 || inBoth.length > 0) && (
+        <div className={cn(gridClasses[viewType], "transition-all duration-300 mb-8")}>
+          {onlySelected.map((product) => (
+            <CardComponent key={product.id} product={product} />
+          ))}
+          {inBoth.map((product) => (
+            <CardComponent key={product.id} product={product} />
+          ))}
+        </div>
+      )}
+
+      {/* Divider for other location */}
+      {onlyOther.length > 0 && (
+        <>
+          <div className="flex items-center gap-4 my-8">
+            <div className="flex-1 h-px bg-neutral-200"></div>
+            <h3 className="text-lg font-medium text-neutral-600 uppercase tracking-wide">
+              In stock at {otherLocationName}
+            </h3>
+            <div className="flex-1 h-px bg-neutral-200"></div>
+          </div>
+
+          {/* Products at other location only */}
+          <div className={cn(gridClasses[viewType], "transition-all duration-300")}>
+            {onlyOther.map((product) => (
+              <CardComponent key={product.id} product={product} />
+            ))}
+          </div>
+        </>
+      )}
+
+      {/* Divider for out of stock products */}
+      {outOfStock.length > 0 && (
+        <>
+          <div className="flex items-center gap-4 my-8">
+            <div className="flex-1 h-px bg-neutral-200"></div>
+            <h3 className="text-lg font-medium text-neutral-600 uppercase tracking-wide">
+              Out of Stock
+            </h3>
+            <div className="flex-1 h-px bg-neutral-200"></div>
+          </div>
+
+          {/* Out of stock products */}
+          <div className={cn(gridClasses[viewType], "transition-all duration-300")}>
+            {outOfStock.map((product) => (
+              <CardComponent key={product.id} product={product} />
+            ))}
+          </div>
+        </>
+      )}
     </div>
   );
 }

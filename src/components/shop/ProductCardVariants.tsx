@@ -6,34 +6,31 @@ import { ShoppingCart, Plus, Check, Eye, CheckCircle, XCircle, MapPin, Truck, Pa
 import { Product } from "@/types";
 import { formatPrice } from "@/lib/utils";
 import { useCartStore } from "@/stores/cartStore";
-import { useLocationStore } from "@/stores/locationStore";
-import { useInventoryStore } from "@/stores/inventoryStore";
 import { cn } from "@/lib/utils";
-import { useState, useEffect } from "react";
+import { useState } from "react";
+import { useSafeLocationId } from "@/hooks/useSafeLocation";
 
 interface ProductCardProps {
   product: Product;
+  index?: number;
 }
 
 // Shared hook for cart and location functionality
 function useProductCard(product: Product) {
   const addItem = useCartStore((state) => state.addItem);
   const cartItem = useCartStore((state) => state.getItem(product.id));
-  const selectedLocationId = useLocationStore((state) => state.selectedLocationId);
-  const { fetchToppenishInventory, getToppenishStock } = useInventoryStore();
+  const { locationId: selectedLocationId } = useSafeLocationId();
   const [justAdded, setJustAdded] = useState(false);
 
-  // Fetch Toppenish inventory for this product
-  useEffect(() => {
-    if (product.sku) {
-      fetchToppenishInventory([product.sku]);
-    }
-  }, [product.sku, fetchToppenishInventory]);
+  // Get stock from inventory_by_location (calculated server-side)
+  const yakimaInventory = product.inventory_by_location?.find(loc => loc.location_id === 1);
+  const toppenishInventory = product.inventory_by_location?.find(loc => loc.location_id === 2);
+
+  const yakimaStock = yakimaInventory?.stock_quantity ?? 0;
+  const toppenishStock = toppenishInventory?.stock_quantity ?? 0;
 
   // Get location name and stock based on selected location
   const locationName = selectedLocationId === 1 ? "Yakima" : "Toppenish";
-  const yakimaStock = product.stock_quantity ?? 0;
-  const toppenishStock = product.sku ? getToppenishStock(product.sku) : 0;
   const stockForLocation = selectedLocationId === 1 ? yakimaStock : toppenishStock;
   // Product is in stock if available at ANY location (since customers can buy from either)
   const isInStock = yakimaStock > 0 || toppenishStock > 0;
@@ -72,7 +69,7 @@ function useProductCard(product: Product) {
 // ============================================
 // COMPACT GRID - Smaller cards, more products visible
 // ============================================
-export function ProductCardCompact({ product }: ProductCardProps) {
+export function ProductCardCompact({ product, index = 0 }: ProductCardProps) {
   const { cartItem, isInStock, handleAddToCart, locationName, stockForLocation, selectedLocationId, yakimaStock, toppenishStock } = useProductCard(product);
   const mainImage = product.images[0];
   // Show "Available at other location" when product has no stock at selected location
@@ -93,6 +90,7 @@ export function ProductCardCompact({ product }: ProductCardProps) {
             fill
             sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 20vw"
             className="object-cover"
+            priority={index < 6}
           />
         ) : (
           <div className="absolute inset-0 flex items-center justify-center text-neutral-300">
@@ -134,18 +132,14 @@ export function ProductCardCompact({ product }: ProductCardProps) {
         </div>
         {/* Stock at both locations */}
         <div className="flex items-center gap-2 text-xs mt-1">
-          {selectedLocationId === 1 ? (
-            <>
-              <span className={cn("font-medium", yakimaStock > 0 ? "text-green-600" : "text-neutral-400")}>Y</span>
-              <span className="text-neutral-300">|</span>
-              <span className={cn("font-medium", toppenishStock > 0 ? "text-green-600" : "text-neutral-400")}>T</span>
-            </>
-          ) : (
-            <>
-              <span className={cn("font-medium", toppenishStock > 0 ? "text-green-600" : "text-neutral-400")}>T</span>
-              <span className="text-neutral-300">|</span>
-              <span className={cn("font-medium", yakimaStock > 0 ? "text-green-600" : "text-neutral-400")}>Y</span>
-            </>
+          {yakimaStock > 0 && (
+            <span className="font-medium text-green-600">Y</span>
+          )}
+          {yakimaStock > 0 && toppenishStock > 0 && (
+            <span className="text-neutral-300">|</span>
+          )}
+          {toppenishStock > 0 && (
+            <span className="font-medium text-green-600">T</span>
           )}
         </div>
       </div>
@@ -156,7 +150,7 @@ export function ProductCardCompact({ product }: ProductCardProps) {
 // ============================================
 // DETAILED CARDS - New design with stock badge and dual buttons
 // ============================================
-export function ProductCardDetailed({ product }: ProductCardProps) {
+export function ProductCardDetailed({ product, index = 0 }: ProductCardProps) {
   const { cartItem, isInStock, handleAddToCart, handleQuickView, justAdded, yakimaStock, toppenishStock, selectedLocationId } = useProductCard(product);
   const mainImage = product.images[0];
 
@@ -242,36 +236,42 @@ export function ProductCardDetailed({ product }: ProductCardProps) {
         <div className="space-y-2 text-sm mb-4">
           {/* Pickup */}
           <div className="flex items-start gap-2">
-            <CheckCircle className="h-4 w-4 text-green-600 mt-0.5 flex-shrink-0" />
+            {(yakimaStock > 0 || toppenishStock > 0) ? (
+              <CheckCircle className="h-4 w-4 text-green-600 mt-0.5 flex-shrink-0" />
+            ) : (
+              <XCircle className="h-4 w-4 text-red-600 mt-0.5 flex-shrink-0" />
+            )}
             <div>
               <span className="font-medium text-neutral-900">Pickup today</span>
-              <div className="flex items-center gap-2 text-xs text-neutral-500 mt-0.5">
-                {selectedLocationId === 1 ? (
-                  <>
-                    <span className={cn("font-medium", yakimaStock > 0 ? "text-green-600" : "text-neutral-400")}>Yakima</span>
+              {(yakimaStock > 0 || toppenishStock > 0) ? (
+                <div className="flex items-center gap-2 text-xs text-neutral-500 mt-0.5">
+                  {yakimaStock > 0 && (
+                    <span className="font-medium text-green-600">Yakima</span>
+                  )}
+                  {yakimaStock > 0 && toppenishStock > 0 && (
                     <span className="text-neutral-300">|</span>
-                    <span className={cn("font-medium", toppenishStock > 0 ? "text-green-600" : "text-neutral-400")}>Toppenish</span>
-                  </>
-                ) : (
-                  <>
-                    <span className={cn("font-medium", toppenishStock > 0 ? "text-green-600" : "text-neutral-400")}>Toppenish</span>
-                    <span className="text-neutral-300">|</span>
-                    <span className={cn("font-medium", yakimaStock > 0 ? "text-green-600" : "text-neutral-400")}>Yakima</span>
-                  </>
-                )}
-              </div>
+                  )}
+                  {toppenishStock > 0 && (
+                    <span className="font-medium text-green-600">Toppenish</span>
+                  )}
+                </div>
+              ) : (
+                <div className="text-xs text-red-600 mt-0.5">
+                  Out of stock
+                </div>
+              )}
             </div>
           </div>
 
           {/* Local Delivery */}
           <div className="flex items-center gap-2">
-            <Truck className="h-4 w-4 text-green-600 flex-shrink-0" />
+            <Truck className={`h-4 w-4 flex-shrink-0 ${isInStock ? 'text-green-600' : 'text-red-600'}`} />
             <span className="font-medium text-neutral-900">Local delivery</span>
           </div>
 
           {/* Shipping */}
           <div className="flex items-center gap-2">
-            <Package className="h-4 w-4 text-green-600 flex-shrink-0" />
+            <Package className={`h-4 w-4 flex-shrink-0 ${isInStock ? 'text-green-600' : 'text-red-600'}`} />
             <span className="font-medium text-neutral-900">Ships nationwide</span>
           </div>
         </div>
@@ -400,28 +400,34 @@ export function ProductCardList({ product }: ProductCardProps) {
           {/* Fulfillment Options */}
           <div className="flex flex-wrap items-center gap-3 text-xs">
             <div className="flex items-center gap-1">
-              <CheckCircle className="h-3.5 w-3.5 text-green-600" />
+              {(yakimaStock > 0 || toppenishStock > 0) ? (
+                <CheckCircle className="h-3.5 w-3.5 text-green-600" />
+              ) : (
+                <XCircle className="h-3.5 w-3.5 text-red-600" />
+              )}
               <span className="text-neutral-600">Pickup:</span>
-              {selectedLocationId === 1 ? (
+              {(yakimaStock > 0 || toppenishStock > 0) ? (
                 <>
-                  <span className={cn("font-medium", yakimaStock > 0 ? "text-green-600" : "text-neutral-400")}>Yakima</span>
-                  <span className="text-neutral-300">|</span>
-                  <span className={cn("font-medium", toppenishStock > 0 ? "text-green-600" : "text-neutral-400")}>Toppenish</span>
+                  {yakimaStock > 0 && (
+                    <span className="font-medium text-green-600">Yakima</span>
+                  )}
+                  {yakimaStock > 0 && toppenishStock > 0 && (
+                    <span className="text-neutral-300">|</span>
+                  )}
+                  {toppenishStock > 0 && (
+                    <span className="font-medium text-green-600">Toppenish</span>
+                  )}
                 </>
               ) : (
-                <>
-                  <span className={cn("font-medium", toppenishStock > 0 ? "text-green-600" : "text-neutral-400")}>Toppenish</span>
-                  <span className="text-neutral-300">|</span>
-                  <span className={cn("font-medium", yakimaStock > 0 ? "text-green-600" : "text-neutral-400")}>Yakima</span>
-                </>
+                <span className="font-medium text-red-600">Out of stock</span>
               )}
             </div>
             <div className="flex items-center gap-1">
-              <Truck className="h-3.5 w-3.5 text-green-600" />
+              <Truck className={`h-3.5 w-3.5 ${isInStock ? 'text-green-600' : 'text-red-600'}`} />
               <span className="text-neutral-600">Delivery</span>
             </div>
             <div className="flex items-center gap-1">
-              <Package className="h-3.5 w-3.5 text-green-600" />
+              <Package className={`h-3.5 w-3.5 ${isInStock ? 'text-green-600' : 'text-red-600'}`} />
               <span className="text-neutral-600">Ships</span>
             </div>
           </div>
@@ -570,35 +576,41 @@ export function ProductCardHero({ product }: ProductCardProps) {
         <div className="space-y-2 text-sm">
           {/* Pickup */}
           <div className="flex items-start gap-2">
-            <CheckCircle className="h-4 w-4 text-green-600 mt-0.5 flex-shrink-0" />
+            {(yakimaStock > 0 || toppenishStock > 0) ? (
+              <CheckCircle className="h-4 w-4 text-green-600 mt-0.5 flex-shrink-0" />
+            ) : (
+              <XCircle className="h-4 w-4 text-red-600 mt-0.5 flex-shrink-0" />
+            )}
             <div>
               <span className="font-medium text-neutral-900">Pickup today</span>
-              <div className="flex items-center gap-2 text-xs text-neutral-500 mt-0.5">
-                {selectedLocationId === 1 ? (
-                  <>
-                    <span className={cn("font-medium", yakimaStock > 0 ? "text-green-600" : "text-neutral-400")}>Yakima</span>
+              {(yakimaStock > 0 || toppenishStock > 0) ? (
+                <div className="flex items-center gap-2 text-xs text-neutral-500 mt-0.5">
+                  {yakimaStock > 0 && (
+                    <span className="font-medium text-green-600">Yakima</span>
+                  )}
+                  {yakimaStock > 0 && toppenishStock > 0 && (
                     <span className="text-neutral-300">|</span>
-                    <span className={cn("font-medium", toppenishStock > 0 ? "text-green-600" : "text-neutral-400")}>Toppenish</span>
-                  </>
-                ) : (
-                  <>
-                    <span className={cn("font-medium", toppenishStock > 0 ? "text-green-600" : "text-neutral-400")}>Toppenish</span>
-                    <span className="text-neutral-300">|</span>
-                    <span className={cn("font-medium", yakimaStock > 0 ? "text-green-600" : "text-neutral-400")}>Yakima</span>
-                  </>
-                )}
-              </div>
+                  )}
+                  {toppenishStock > 0 && (
+                    <span className="font-medium text-green-600">Toppenish</span>
+                  )}
+                </div>
+              ) : (
+                <div className="text-xs text-red-600 mt-0.5">
+                  Out of stock
+                </div>
+              )}
             </div>
           </div>
 
           {/* Local Delivery & Shipping */}
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-1.5">
-              <Truck className="h-4 w-4 text-green-600" />
+              <Truck className={`h-4 w-4 ${isInStock ? 'text-green-600' : 'text-red-600'}`} />
               <span className="text-neutral-700">Delivery</span>
             </div>
             <div className="flex items-center gap-1.5">
-              <Package className="h-4 w-4 text-green-600" />
+              <Package className={`h-4 w-4 ${isInStock ? 'text-green-600' : 'text-red-600'}`} />
               <span className="text-neutral-700">Ships</span>
             </div>
           </div>
